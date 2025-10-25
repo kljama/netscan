@@ -41,14 +41,17 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 		defer wg.Done()
 	}
 	
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	// Initialize timer for first ping with 1 second delay to avoid immediate ping storm
+	timer := time.NewTimer(1 * time.Second)
+	defer timer.Stop()
 	
 	for {
 		select {
 		case <-ctx.Done():
-			return // Exit on context cancellation
-		case <-ticker.C:
+			// Stop timer on graceful shutdown
+			timer.Stop()
+			return
+		case <-timer.C:
 			// Acquire token from rate limiter (blocks until available or context cancelled)
 			if err := limiter.Wait(ctx); err != nil {
 				// Context was cancelled while waiting for token
@@ -57,6 +60,10 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 
 			// Perform the ping operation with in-flight tracking
 			performPing(device, timeout, writer, stateMgr, inFlightCounter)
+			
+			// Reset timer to schedule next ping after interval
+			// This ensures interval is time BETWEEN pings, not fixed schedule
+			timer.Reset(interval)
 		}
 	}
 }

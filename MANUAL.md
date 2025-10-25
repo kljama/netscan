@@ -663,7 +663,7 @@ snmp:
 ```yaml
 # Ping frequency per monitored device
 # Default: "2s"
-# Each device gets dedicated pinger goroutine pinging at this interval
+# Minimum time between ping attempts for each device (adaptive scheduling)
 ping_interval: "2s"
 
 # Timeout for individual ping operations
@@ -680,6 +680,8 @@ ping_burst_limit: 256    # Token bucket capacity (max burst size)
 ```
 
 **Notes:**
+* ping_interval specifies the minimum time *between* ping operations (timer resets after each ping completes)
+* This adaptive approach prevents "thundering herd" when rate limiter delays accumulate
 * Lower intervals (e.g., "1s") provide more data points but increase CPU/network load
 * ping_timeout should be > ping_interval to allow proper error margin (recommended: ping_interval + 1s minimum)
 * ping_rate_limit controls global ping rate across all devices (64.0 = 64 pings/sec sustained)
