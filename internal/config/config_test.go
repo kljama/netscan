@@ -12,8 +12,7 @@ func TestLoadConfigValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	configYAML := `discovery_interval: "1h"
-icmp_discovery_interval: "5m"
+	configYAML := `icmp_discovery_interval: "5m"
 icmp_workers: 64
 snmp_workers: 32
 networks:
@@ -37,9 +36,6 @@ influxdb:
 	cfg, err := LoadConfig(f.Name())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-	if cfg.DiscoveryInterval.String() != "1h0m0s" {
-		t.Errorf("expected 1h, got %v", cfg.DiscoveryInterval)
 	}
 	if len(cfg.Networks) != 1 || cfg.Networks[0] != "192.168.1.0/30" {
 		t.Errorf("networks not parsed correctly")
