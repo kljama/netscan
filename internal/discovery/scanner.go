@@ -2,16 +2,16 @@ package discovery
 
 import (
 	"context"
-	"fmt"
+	"encoding/binary"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/kljama/netscan/internal/config"
-	"github.com/kljama/netscan/internal/state"
 	"github.com/gosnmp/gosnmp"
+	"github.com/kljama/netscan/internal/config"
+	"github.com/kljama/netscan/internal/snmp"
+	"github.com/kljama/netscan/internal/state"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/time/rate"
@@ -102,26 +102,27 @@ func RunICMPSweep(ctx context.Context, networks []string, workers int, limiter *
 					Interface("panic", r).
 					Msg("ICMP producer panic recovered")
 			}
+			close(jobs)
 		}()
 
-		// Step 1: Buffer all IPs from all networks into a master list
-		var allIPs []string
-		for _, network := range networks {
-			ips := ipsFromCIDR(network)
-			allIPs = append(allIPs, ips...)
-		}
-
-		// Step 2: Shuffle the master list to randomize scan order
-		// This obscures the sequential scanning pattern across all subnets
-		rand.Shuffle(len(allIPs), func(i, j int) {
-			allIPs[i], allIPs[j] = allIPs[j], allIPs[i]
+		// Shuffle networks to randomize which network we scan first
+		shuffledNetworks := make([]string, len(networks))
+		copy(shuffledNetworks, networks)
+		rand.Shuffle(len(shuffledNetworks), func(i, j int) {
+			shuffledNetworks[i], shuffledNetworks[j] = shuffledNetworks[j], shuffledNetworks[i]
 		})
 
-		// Step 3: Feed shuffled IPs to jobs channel
-		for _, ip := range allIPs {
-			jobs <- ip
+		for _, network := range shuffledNetworks {
+			// Check context
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			// Stream IPs in random order
+			streamRandomizedNetwork(ctx, network, jobs)
 		}
-		close(jobs)
 	}()
 
 	// Wait for all workers to complete, then close results channel
@@ -145,65 +146,6 @@ func RunICMPSweep(ctx context.Context, networks []string, workers int, limiter *
 		responsiveIPs = append(responsiveIPs, ip)
 	}
 	return responsiveIPs
-}
-
-// snmpGetWithFallback attempts to get SNMP OIDs using Get, falling back to GetNext if Get fails with NoSuchInstance
-func snmpGetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, error) {
-	// Try Get first (most efficient for .0 instances)
-	resp, err := params.Get(oids)
-	if err == nil {
-		// Check if we got valid responses (no NoSuchInstance errors)
-		hasValidData := false
-		for _, variable := range resp.Variables {
-			if variable.Type != gosnmp.NoSuchInstance && variable.Type != gosnmp.NoSuchObject {
-				hasValidData = true
-				break
-			}
-		}
-		if hasValidData {
-			return resp, nil
-		}
-		// All variables returned NoSuchInstance/NoSuchObject, try GetNext
-		log.Debug().
-			Str("target", params.Target).
-			Msg("Get returned NoSuchInstance, trying GetNext fallback")
-	}
-
-	// Fallback to GetNext for each OID (works when .0 instance doesn't exist)
-	// This queries the next OID in the tree, which often returns the value we want
-	baseOIDs := make([]string, len(oids))
-	for i, oid := range oids {
-		// Remove the .0 suffix if present to get base OID
-		if strings.HasSuffix(oid, ".0") {
-			baseOIDs[i] = oid[:len(oid)-2]
-		} else {
-			baseOIDs[i] = oid
-		}
-	}
-
-	variables := make([]gosnmp.SnmpPDU, 0, len(baseOIDs))
-	for _, baseOID := range baseOIDs {
-		resp, err := params.GetNext([]string{baseOID})
-		if err != nil {
-			continue
-		}
-		if len(resp.Variables) > 0 {
-			// Verify the returned OID is under the requested base OID
-			returnedOID := resp.Variables[0].Name
-			if strings.HasPrefix(returnedOID, baseOID) {
-				variables = append(variables, resp.Variables[0])
-			}
-		}
-	}
-
-	if len(variables) == 0 {
-		return nil, fmt.Errorf("no valid SNMP data retrieved")
-	}
-
-	// Construct a response packet with the collected variables
-	return &gosnmp.SnmpPacket{
-		Variables: variables,
-	}, nil
 }
 
 // RunSNMPScan performs concurrent SNMP queries on a list of IP addresses
@@ -251,7 +193,7 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmpGetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(params, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				// SNMP query failed, skip this device
@@ -263,7 +205,7 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 			}
 
 			// Validate and sanitize SNMP response data
-			hostname, err := validateSNMPString(resp.Variables[0].Value, "sysName")
+			hostname, err := snmp.ValidateString(resp.Variables[0].Value, "sysName")
 			if err != nil {
 				log.Debug().
 					Str("ip", ip).
@@ -271,7 +213,7 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 					Msg("Invalid sysName")
 				continue
 			}
-			sysDescr, err := validateSNMPString(resp.Variables[1].Value, "sysDescr")
+			sysDescr, err := snmp.ValidateString(resp.Variables[1].Value, "sysDescr")
 			if err != nil {
 				log.Debug().
 					Str("ip", ip).
@@ -371,18 +313,18 @@ func RunScan(cfg *config.Config) []state.Device {
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmpGetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(params, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				continue // Skip devices with incomplete SNMP responses
 			}
 
 			// Validate and sanitize SNMP response data
-			hostname, err := validateSNMPString(resp.Variables[0].Value, "sysName")
+			hostname, err := snmp.ValidateString(resp.Variables[0].Value, "sysName")
 			if err != nil {
 				continue // Skip devices with invalid hostname data
 			}
-			sysDescr, err := validateSNMPString(resp.Variables[1].Value, "sysDescr")
+			sysDescr, err := snmp.ValidateString(resp.Variables[1].Value, "sysDescr")
 			if err != nil {
 				continue // Skip devices with invalid description data
 			}
@@ -445,14 +387,14 @@ func RunPingDiscovery(cidr string, icmpWorkers int) []state.Device {
 			Msg("Invalid CIDR")
 		return []state.Device{}
 	}
-	
+
 	ones, bits := ipnet.Mask.Size()
 	hostBits := bits - ones
 	bufferSize := 256 // Default buffer
 	if hostBits < 8 {
 		bufferSize = 1 << hostBits // Smaller networks can use exact size
 	}
-	
+
 	var (
 		jobs    = make(chan string, bufferSize)       // Buffered channel for IP addresses to ping
 		results = make(chan state.Device, bufferSize) // Buffered channel for responsive devices
@@ -569,7 +511,7 @@ func RunFullDiscovery(cfg *config.Config) []state.Device {
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmpGetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(params, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				// SNMP query failed, but device is online
@@ -583,11 +525,11 @@ func RunFullDiscovery(cfg *config.Config) []state.Device {
 			}
 
 			// Validate and sanitize SNMP response data
-			hostname, err := validateSNMPString(resp.Variables[0].Value, "sysName")
+			hostname, err := snmp.ValidateString(resp.Variables[0].Value, "sysName")
 			if err != nil {
 				continue // Skip devices with invalid hostname data
 			}
-			sysDescr, err := validateSNMPString(resp.Variables[1].Value, "sysDescr")
+			sysDescr, err := snmp.ValidateString(resp.Variables[1].Value, "sysDescr")
 			if err != nil {
 				continue // Skip devices with invalid description data
 			}
@@ -727,11 +669,11 @@ func streamIPsFromCIDR(cidr string, ipChan chan<- string) {
 			Msg("Invalid CIDR")
 		return
 	}
-	
+
 	// Calculate network size for safety checks
 	ones, bits := ipnet.Mask.Size()
 	hostBits := bits - ones
-	
+
 	// For networks larger than /16 (65K hosts), log warning
 	// but still proceed (worker pool will rate-limit actual operations)
 	if hostBits > 16 {
@@ -740,26 +682,26 @@ func streamIPsFromCIDR(cidr string, ipChan chan<- string) {
 			Int("host_bits", hostBits).
 			Msg("Large network detected - scan may take significant time")
 	}
-	
+
 	// Start from network address
 	ip = ip.Mask(ipnet.Mask)
-	
+
 	// For /31 and /32 networks, there are no network/broadcast addresses to skip (RFC 3021)
 	// For all other networks, skip the network address (first IP) and broadcast address (last IP)
 	skipNetworkAndBroadcast := ones < 31
-	
+
 	if skipNetworkAndBroadcast {
 		// Skip network address (first IP)
 		incIP(ip)
 	}
-	
+
 	// Stream usable host IPs directly to channel
 	count := 0
 	maxIPs := 1 << uint(hostBits) // Calculate actual network size
 	if maxIPs > 65536 {
 		maxIPs = 65536 // Safety limit
 	}
-	
+
 	for ipnet.Contains(ip) && count < maxIPs {
 		// For networks with network/broadcast addresses, stop before broadcast address
 		if skipNetworkAndBroadcast {
@@ -772,7 +714,7 @@ func streamIPsFromCIDR(cidr string, ipChan chan<- string) {
 				break
 			}
 		}
-		
+
 		ipChan <- ip.String()
 		count++
 		incIP(ip)
@@ -789,11 +731,11 @@ func ipsFromCIDR(cidr string) []string {
 	if err != nil {
 		return ips
 	}
-	
+
 	// Calculate network size to prevent memory exhaustion
 	ones, bits := ipnet.Mask.Size()
 	hostBits := bits - ones
-	
+
 	// For networks larger than /16 (65K hosts), limit the expansion
 	// to prevent memory exhaustion attacks
 	maxIPs := 65536 // Maximum 64K IPs in memory at once
@@ -802,19 +744,19 @@ func ipsFromCIDR(cidr string) []string {
 		// This should have been caught by config validation
 		return ips
 	}
-	
+
 	// Start from network address
 	ip = ip.Mask(ipnet.Mask)
-	
+
 	// For /31 and /32 networks, there are no network/broadcast addresses to skip (RFC 3021)
 	// For all other networks, skip the network address (first IP) and broadcast address (last IP)
 	skipNetworkAndBroadcast := ones < 31
-	
+
 	if skipNetworkAndBroadcast {
 		// Skip network address (first IP)
 		incIP(ip)
 	}
-	
+
 	// Iterate through usable host IPs in the subnet
 	count := 0
 	for ipnet.Contains(ip) {
@@ -829,7 +771,7 @@ func ipsFromCIDR(cidr string) []string {
 				break
 			}
 		}
-		
+
 		ips = append(ips, ip.String())
 		count++
 		if count >= maxIPs {
@@ -851,51 +793,82 @@ func incIP(ip net.IP) {
 	}
 }
 
-// validateSNMPString validates and sanitizes SNMP response string values
-func validateSNMPString(value interface{}, oidName string) (string, error) {
-	var str string
-	
-	// Handle different types that SNMP can return for string values
-	switch v := value.(type) {
-	case string:
-		str = v
-	case []byte:
-		// SNMP OctetString values are often returned as byte arrays
-		// Note: []byte and []uint8 are the same type in Go
-		str = string(v)
-	default:
-		return "", fmt.Errorf("invalid type for %s: expected string or []byte, got %T", oidName, value)
+// streamRandomizedNetwork generates IPs from a CIDR using a Linear Congruential Generator (LCG)
+// to iterate through the address space in a pseudo-random order without buffering.
+func streamRandomizedNetwork(ctx context.Context, cidr string, out chan<- string) {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		log.Error().
+			Str("cidr", cidr).
+			Err(err).
+			Msg("Invalid CIDR")
+		return
 	}
 
-	// Check for null bytes and other control characters that could be dangerous
-	if strings.ContainsRune(str, '\x00') {
-		return "", fmt.Errorf("invalid %s: contains null bytes", oidName)
+	ones, bits := ipnet.Mask.Size()
+	hostBits := bits - ones
+	if hostBits > 32 {
+		return // Should not happen for IPv4
 	}
 
-	// Limit string length to prevent memory exhaustion
-	if len(str) > 1024 {
-		str = str[:1024] // Truncate to reasonable length
-	}
+	// Determine the range size
+	size := uint64(1) << hostBits
+	mask := size - 1
 
-	// Basic sanitization - remove or replace potentially dangerous characters
-	// Allow printable ASCII and some common extended characters
-	sanitized := strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\r' || r == '\t' {
-			return ' ' // Replace newlines/tabs with spaces
+	// Generate LCG parameters
+	// a must satisfy: a % 4 == 1
+	// c must be odd
+	a := (rand.Uint64() * 4) + 1
+	c := rand.Uint64() | 1
+
+	current := rand.Uint64() & mask
+
+	// Prepare network address as uint32
+	networkIP := ipToUint32(ipnet.IP)
+
+	// For standard subnets, we skip first (network) and last (broadcast)
+	// Exception: /31 (size 2) and /32 (size 1) don't have reserved addresses
+	skipNetwork := ones < 31
+	skipBroadcast := ones < 31
+
+	for i := uint64(0); i < size; i++ {
+		// Check context periodically (every 1000 iterations or so to avoid overhead)
+		if i%1000 == 0 {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 		}
-		if r < 32 || r > 126 { // Non-printable ASCII
-			return -1 // Remove character
+
+		// Next LCG value
+		current = (a*current + c) & mask
+
+		// Skip network address (offset 0)
+		if skipNetwork && current == 0 {
+			continue
 		}
-		return r
-	}, str)
+		// Skip broadcast address (offset size-1)
+		if skipBroadcast && current == mask {
+			continue
+		}
 
-	// Trim whitespace
-	sanitized = strings.TrimSpace(sanitized)
-
-	// Ensure we have a valid string after sanitization
-	if len(sanitized) == 0 {
-		return "", fmt.Errorf("invalid %s: empty after sanitization", oidName)
+		// Calculate IP
+		ipInt := networkIP + uint32(current)
+		ip := uint32ToIP(ipInt)
+		out <- ip.String()
 	}
+}
 
-	return sanitized, nil
+func ipToUint32(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func uint32ToIP(n uint32) net.IP {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, n)
+	return ip
 }

@@ -32,7 +32,6 @@ type InfluxDBConfig struct {
 
 // Config holds all application configuration parameters
 type Config struct {
-	DiscoveryInterval     time.Duration  `yaml:"discovery_interval"`
 	IcmpDiscoveryInterval time.Duration  `yaml:"icmp_discovery_interval"`
 	IcmpWorkers           int            `yaml:"icmp_workers"`
 	SnmpWorkers           int            `yaml:"snmp_workers"`
@@ -50,7 +49,6 @@ type Config struct {
 	SNMPMaxConsecutiveFails int          `yaml:"snmp_max_consecutive_fails"` // Circuit breaker: max consecutive SNMP failures before suspension
 	SNMPBackoffDuration   time.Duration  `yaml:"snmp_backoff_duration"`  // Circuit breaker: SNMP suspension duration after max failures
 	InfluxDB              InfluxDBConfig `yaml:"influxdb"`
-	SNMPDailySchedule     string         `yaml:"snmp_daily_schedule"`  // DEPRECATED: Daily SNMP scan time (HH:MM format) - use snmp_interval instead
 	HealthCheckPort       int            `yaml:"health_check_port"`    // HTTP health check endpoint port
 	HealthReportInterval  time.Duration  `yaml:"health_report_interval"` // Interval for writing health metrics
 	// Resource protection settings
@@ -71,7 +69,6 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Raw config struct for YAML parsing with string duration fields
 	var raw struct {
-		DiscoveryInterval       string   `yaml:"discovery_interval"`
 		IcmpDiscoveryInterval   string   `yaml:"icmp_discovery_interval"`
 		IcmpWorkers             int      `yaml:"icmp_workers"`
 		SnmpWorkers             int      `yaml:"snmp_workers"`
@@ -97,7 +94,6 @@ func LoadConfig(path string) (*Config, error) {
 			BatchSize     int    `yaml:"batch_size"`
 			FlushInterval string `yaml:"flush_interval"`
 		} `yaml:"influxdb"`
-		SNMPDailySchedule     string `yaml:"snmp_daily_schedule"`
 		HealthCheckPort       int    `yaml:"health_check_port"`
 		HealthReportInterval  string `yaml:"health_report_interval"`
 		// Resource protection settings
@@ -114,18 +110,6 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// Parse string durations to time.Duration
-	// discovery_interval is optional for backward compatibility (deprecated in new architecture)
-	var discoveryInterval time.Duration
-	if raw.DiscoveryInterval != "" {
-		discoveryInterval, err = time.ParseDuration(raw.DiscoveryInterval)
-		if err != nil {
-			return nil, fmt.Errorf("invalid discovery_interval: %v", err)
-		}
-	} else {
-		// Default to 4h if not specified (backward compatibility)
-		discoveryInterval = 4 * time.Hour
-	}
-	
 	icmpDiscoveryInterval, err := time.ParseDuration(raw.IcmpDiscoveryInterval)
 	if err != nil {
 		return nil, fmt.Errorf("invalid icmp_discovery_interval: %v", err)
@@ -290,7 +274,6 @@ func LoadConfig(path string) (*Config, error) {
 	raw.SNMP.Community = expandEnv(raw.SNMP.Community)
 
 	return &Config{
-		DiscoveryInterval:       discoveryInterval,
 		IcmpDiscoveryInterval:   icmpDiscoveryInterval,
 		IcmpWorkers:             raw.IcmpWorkers,
 		SnmpWorkers:             raw.SnmpWorkers,
@@ -316,7 +299,6 @@ func LoadConfig(path string) (*Config, error) {
 			BatchSize:     raw.InfluxDB.BatchSize,
 			FlushInterval: flushInterval,
 		},
-		SNMPDailySchedule:        raw.SNMPDailySchedule,
 		HealthCheckPort:          raw.HealthCheckPort,
 		HealthReportInterval:     healthReportInterval,
 		MaxConcurrentPingers:     raw.MaxConcurrentPingers,
@@ -351,21 +333,11 @@ func ValidateConfig(cfg *Config) (string, error) {
 	}
 
 	// Validate intervals
-	if cfg.DiscoveryInterval < time.Minute {
-		return "", fmt.Errorf("discovery_interval must be at least 1 minute, got %v", cfg.DiscoveryInterval)
-	}
 	if cfg.IcmpDiscoveryInterval < time.Minute {
 		return "", fmt.Errorf("icmp_discovery_interval must be at least 1 minute, got %v", cfg.IcmpDiscoveryInterval)
 	}
 	if cfg.PingInterval < time.Second {
 		return "", fmt.Errorf("ping_interval must be at least 1 second, got %v", cfg.PingInterval)
-	}
-
-	// Validate SNMP daily schedule format (HH:MM)
-	if cfg.SNMPDailySchedule != "" {
-		if err := validateTimeFormat(cfg.SNMPDailySchedule); err != nil {
-			return "", fmt.Errorf("snmp_daily_schedule validation failed: %v", err)
-		}
 	}
 
 	// Validate SNMP settings

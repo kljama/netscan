@@ -158,7 +158,6 @@ func TestValidateCircuitBreakerParams(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &Config{
 				Networks:                 []string{"192.168.1.0/24"},
-				DiscoveryInterval:        4 * time.Hour,
 				IcmpDiscoveryInterval:    5 * time.Minute,
 				IcmpWorkers:              64,
 				SnmpWorkers:              32,
