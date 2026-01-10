@@ -467,7 +467,6 @@ The `deploy.sh` script generates a systemd service file with the following secur
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | **Main Config** | | | |
-| `discovery_interval` | `time.Duration` | `4h` | Legacy discovery interval (backward compatibility) |
 | `icmp_discovery_interval` | `time.Duration` | (required) | Interval for ICMP network discovery sweeps |
 | `icmp_workers` | `int` | `64` | Number of concurrent ICMP discovery workers |
 | `snmp_workers` | `int` | `32` | Number of concurrent SNMP scan workers |
@@ -483,7 +482,6 @@ The `deploy.sh` script generates a systemd service file with the following secur
 | `snmp_burst_limit` | `int` | `50` | Maximum burst SNMP capacity (token bucket size) |
 | `snmp_max_consecutive_fails` | `int` | `5` | Circuit breaker: consecutive SNMP failures before suspension |
 | `snmp_backoff_duration` | `time.Duration` | `1h` | Circuit breaker: SNMP suspension duration after threshold |
-| `snmp_daily_schedule` | `string` | (optional) | DEPRECATED: Daily SNMP scan time in HH:MM format |
 | `health_check_port` | `int` | `8080` | HTTP port for health check endpoint |
 | `health_report_interval` | `time.Duration` | `10s` | Interval for writing health metrics to InfluxDB |
 | `max_concurrent_pingers` | `int` | `20000` | Maximum number of concurrent pinger goroutines |
@@ -843,8 +841,8 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 - Each worker:
   - Configures `gosnmp.GoSNMP` with target IP, port, community, version, timeout, retries
   - Connects via `params.Connect()`
-  - Queries standard MIB-II OIDs using `snmpGetWithFallback()`
-  - Validates and sanitizes SNMP responses via `validateSNMPString()`
+  - Queries standard MIB-II OIDs using `snmp.GetWithFallback()`
+  - Validates and sanitizes SNMP responses via `snmp.ValidateString()`
   - Sends `state.Device` with IP, Hostname, SysDescr, LastSeen to `results` channel
 - Producer goroutine enqueues all IPs to `jobs` channel, then closes it
 - Wait goroutine waits for all workers via `WaitGroup`, then closes `results` channel
@@ -852,14 +850,14 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 
 **SNMP Robustness Features:**
 
-- **`snmpGetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, error)`**:
+- **`snmp.GetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, error)`**:
   - **Primary Strategy:** Attempts `params.Get(oids)` first (most efficient for .0 instances)
   - **Fallback Strategy:** If Get returns `NoSuchInstance`/`NoSuchObject`, tries `params.GetNext()` for each OID
   - **Rationale:** Some devices don't support .0 instance OIDs, GetNext retrieves next OID in tree
   - **Validation:** Verifies returned OID has the requested base OID as prefix
   - **Error Handling:** Returns error if no valid SNMP data retrieved from either method
 
-- **`validateSNMPString(value interface{}, oidName string) (string, error)`**:
+- **`snmp.ValidateString(value interface{}, oidName string) (string, error)`**:
   - **Type Handling:** Accepts both `string` and `[]byte` types (SNMP OctetString values)
   - **Conversion:** Converts `[]byte` to string via `string(v)`
   - **Security Checks:**
@@ -993,8 +991,8 @@ func StartSNMPPoller(ctx context.Context, wg *sync.WaitGroup, device state.Devic
 4. **SNMP Query Process:**
    - Configures `gosnmp.GoSNMP` with target IP, port, community, version, timeout, retries
    - Connects via `params.Connect()`
-   - Queries standard MIB-II OIDs using `snmpGetWithFallback()`
-   - Validates and sanitizes SNMP responses via `validateSNMPString()`
+   - Queries standard MIB-II OIDs using `snmp.GetWithFallback()`
+   - Validates and sanitizes SNMP responses via `snmp.ValidateString()`
    - Reports success or failure to circuit breaker
 
 5. **State Updates on Success:**
@@ -1026,8 +1024,8 @@ type SNMPWriter interface {
 
 **Local Helper Functions:**
 
-- `snmpGetWithFallback()` - Local copy of discovery function to avoid circular imports
-- `validateSNMPString()` - Local copy of discovery function to avoid circular imports
+- `snmp.GetWithFallback()` - Shared utility function
+- `snmp.ValidateString()` - Shared utility function
 - Same logic and security checks as discovery versions
 
 ### Health Check Server (`cmd/netscan/health.go`)
@@ -1162,7 +1160,7 @@ Based on recurring patterns in the source code, these are the foundational rules
 
 - **Mandate: Validate all external inputs**
   - IP addresses: use `validateIPAddress()` to reject dangerous addresses
-  - SNMP strings: use `validateSNMPString()` to sanitize and validate
+  - SNMP strings: use `snmp.ValidateString()` to sanitize and validate
   - Network ranges: use `validateCIDR()` to reject dangerous networks
   - URLs: use `validateURL()` to ensure proper scheme and format
 
@@ -1170,7 +1168,7 @@ Based on recurring patterns in the source code, these are the foundational rules
 
 - **Mandate: Sanitize all external data before storage**
   - `sanitizeInfluxString()` for InfluxDB field values
-  - `validateSNMPString()` for SNMP response data
+  - `snmp.ValidateString()` for SNMP response data
   - Remove null bytes, control characters, limit length
   - Prevents injection attacks and database corruption
 

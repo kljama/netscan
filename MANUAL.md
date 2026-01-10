@@ -1043,8 +1043,6 @@ These limits prevent resource exhaustion and DoS attacks.
 
 | Parameter | Type | Default | Required | Description |
 |-----------|------|---------|----------|-------------|
-| `snmp_daily_schedule` | `string` | N/A | No | **DEPRECATED:** Removed in favor of continuous SNMP polling (`snmp_interval`). Daily batch SNMP scans have been replaced with per-device continuous polling for better resilience and timeliness. |
-| `discovery_interval` | `duration` | `"4h"` | No | **Deprecated.** Legacy discovery interval for backward compatibility. Use `icmp_discovery_interval` instead. Will be removed in future version. |
 
 ### Configuration Examples
 
