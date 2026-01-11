@@ -1,5 +1,0 @@
-# github.com/kljama/netscan/internal/state [github.com/kljama/netscan/internal/state.test]
-internal/state/manager_actual_bug_test.go:47:9: no new variables on left side of :=
-internal/state/manager_actual_bug_test.go:47:12: cannot use mgr.Get("192.168.1.100") (value of type *Device) as Device value in assignment
-FAIL	github.com/kljama/netscan/internal/state [build failed]
-FAIL

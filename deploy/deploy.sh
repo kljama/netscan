@@ -271,6 +271,13 @@ enable_service() {
 main() {
     log_info "Starting netscan deployment..."
 
+    # Get the directory of the script and project root
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    # Change to project root for build
+    cd "$PROJECT_ROOT"
+
     check_go
     build_binary
     create_service_user

@@ -1516,14 +1516,14 @@ docker-compose up -d
 
 **Native Deployment:**
 ```bash
-sudo ./deploy.sh
+sudo deploy/deploy.sh
 sudo systemctl status netscan
 sudo journalctl -u netscan -f
 ```
 
 **Undeployment:**
 ```bash
-sudo ./undeploy.sh
+sudo deploy/undeploy.sh
 ```
 
 ---

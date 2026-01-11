@@ -430,7 +430,7 @@ nano config.yml  # or vim, vi, etc.
 #### 3. Run Deployment Script
 
 ```bash
-sudo ./deploy.sh
+sudo deploy/deploy.sh
 ```
 
 **What the script does:**
@@ -670,7 +670,7 @@ sudo journalctl -u netscan -f
 The `undeploy.sh` script safely removes netscan and all associated files:
 
 ```bash
-sudo ./undeploy.sh
+sudo deploy/undeploy.sh
 ```
 
 **What the script does:**
