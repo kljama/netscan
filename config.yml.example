@@ -113,6 +113,7 @@ influxdb:
   bucket: "netscan"           # Bucket for device metrics (ping, device_info)
   health_bucket: "health"     # Bucket for application health metrics (default: 'health')
   batch_size: 5000            # Number of points to batch before writing (default: 5000)
+  buffer_size: 100000         # Buffer size for channel - drop points when full (default: 100000)
   flush_interval: "5s"        # Maximum time to hold points before flushing (default: 5s)
 
 # =============================================================================

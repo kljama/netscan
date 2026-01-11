@@ -18,30 +18,31 @@ import (
 
 // HealthServer provides HTTP health check endpoint
 type HealthServer struct {
-	stateMgr           *state.Manager
-	writer             *influx.Writer
-	startTime          time.Time
-	port               int
-	getPingerCount     func() int
-	getPingsSentCount  func() uint64
+	stateMgr          *state.Manager
+	writer            *influx.Writer
+	startTime         time.Time
+	port              int
+	getPingerCount    func() int
+	getPingsSentCount func() uint64
 }
 
 // HealthResponse represents the health check JSON response
 type HealthResponse struct {
-	Status             string    `json:"status"`               // "healthy", "degraded", "unhealthy"
-	Version            string    `json:"version"`              // Version string
-	Uptime             string    `json:"uptime"`               // Human readable uptime
-	DeviceCount        int       `json:"device_count"`         // Number of monitored devices
-	SuspendedDevices   int       `json:"suspended_devices"`    // Number of suspended devices (circuit breaker)
-	ActivePingers      int       `json:"active_pingers"`       // Number of active pinger goroutines (accurate count)
-	InfluxDBOK         bool      `json:"influxdb_ok"`          // InfluxDB connectivity status
-	InfluxDBSuccessful uint64    `json:"influxdb_successful"`  // Successful batch writes
-	InfluxDBFailed     uint64    `json:"influxdb_failed"`      // Failed batch writes
-	PingsSentTotal     uint64    `json:"pings_sent_total"`     // Total monitoring pings sent
-	Goroutines         int       `json:"goroutines"`           // Current goroutine count
-	MemoryMB           uint64    `json:"memory_mb"`            // Current memory usage in MB (Go heap Alloc)
-	RSSMB              uint64    `json:"rss_mb"`               // OS-level resident set size in MB
-	Timestamp          time.Time `json:"timestamp"`            // Current timestamp
+	Status             string    `json:"status"`              // "healthy", "degraded", "unhealthy"
+	Version            string    `json:"version"`             // Version string
+	Uptime             string    `json:"uptime"`              // Human readable uptime
+	DeviceCount        int       `json:"device_count"`        // Number of monitored devices
+	SuspendedDevices   int       `json:"suspended_devices"`   // Number of suspended devices (circuit breaker)
+	ActivePingers      int       `json:"active_pingers"`      // Number of active pinger goroutines (accurate count)
+	InfluxDBOK         bool      `json:"influxdb_ok"`         // InfluxDB connectivity status
+	InfluxDBSuccessful uint64    `json:"influxdb_successful"` // Successful batch writes
+	InfluxDBFailed     uint64    `json:"influxdb_failed"`     // Failed batch writes
+	DroppedPoints      uint64    `json:"dropped_points"`      // Points dropped due to full buffer
+	PingsSentTotal     uint64    `json:"pings_sent_total"`    // Total monitoring pings sent
+	Goroutines         int       `json:"goroutines"`          // Current goroutine count
+	MemoryMB           uint64    `json:"memory_mb"`           // Current memory usage in MB (Go heap Alloc)
+	RSSMB              uint64    `json:"rss_mb"`              // OS-level resident set size in MB
+	Timestamp          time.Time `json:"timestamp"`           // Current timestamp
 }
 
 // NewHealthServer creates a new health check server
@@ -120,6 +121,7 @@ func (hs *HealthServer) GetHealthMetrics() HealthResponse {
 		InfluxDBOK:         influxOK,
 		InfluxDBSuccessful: hs.writer.GetSuccessfulBatches(),
 		InfluxDBFailed:     hs.writer.GetFailedBatches(),
+		DroppedPoints:      hs.writer.GetDroppedPoints(),
 		PingsSentTotal:     hs.getPingsSentCount(), // Total pings sent counter
 		Goroutines:         runtime.NumGoroutine(),
 		MemoryMB:           m.Alloc / 1024 / 1024,
@@ -171,11 +173,11 @@ func getRSSMB() uint64 {
 			}
 		}
 	}
-	
+
 	// Check for scanner errors
 	if err := s.Err(); err != nil {
 		return 0
 	}
-	
+
 	return 0
 }

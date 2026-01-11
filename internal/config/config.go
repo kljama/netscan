@@ -25,38 +25,39 @@ type InfluxDBConfig struct {
 	Token         string        `yaml:"token"`
 	Org           string        `yaml:"org"`
 	Bucket        string        `yaml:"bucket"`
-	HealthBucket  string        `yaml:"health_bucket"`   // Bucket for health metrics
-	BatchSize     int           `yaml:"batch_size"`      // Number of points to batch before writing
-	FlushInterval time.Duration `yaml:"flush_interval"`  // Maximum time to hold points before flushing
+	HealthBucket  string        `yaml:"health_bucket"`  // Bucket for health metrics
+	BatchSize     int           `yaml:"batch_size"`     // Number of points to batch before writing
+	BufferSize    int           `yaml:"buffer_size"`    // Buffer size for channel (drop points when full)
+	FlushInterval time.Duration `yaml:"flush_interval"` // Maximum time to hold points before flushing
 }
 
 // Config holds all application configuration parameters
 type Config struct {
-	IcmpDiscoveryInterval time.Duration  `yaml:"icmp_discovery_interval"`
-	IcmpWorkers           int            `yaml:"icmp_workers"`
-	SnmpWorkers           int            `yaml:"snmp_workers"`
-	Networks              []string       `yaml:"networks"`
-	SNMP                  SNMPConfig     `yaml:"snmp"`
-	PingInterval          time.Duration  `yaml:"ping_interval"`
-	PingTimeout           time.Duration  `yaml:"ping_timeout"`
-	PingRateLimit         float64        `yaml:"ping_rate_limit"`        // Tokens per second (sustained ping rate)
-	PingBurstLimit        int            `yaml:"ping_burst_limit"`       // Token bucket capacity (max burst)
-	PingMaxConsecutiveFails int          `yaml:"ping_max_consecutive_fails"` // Circuit breaker: max consecutive failures before suspension
-	PingBackoffDuration   time.Duration  `yaml:"ping_backoff_duration"`  // Circuit breaker: suspension duration after max failures
-	SNMPInterval          time.Duration  `yaml:"snmp_interval"`          // Interval for continuous SNMP polling per device
-	SNMPRateLimit         float64        `yaml:"snmp_rate_limit"`        // Tokens per second (sustained SNMP query rate)
-	SNMPBurstLimit        int            `yaml:"snmp_burst_limit"`       // Token bucket capacity (max SNMP burst)
-	SNMPMaxConsecutiveFails int          `yaml:"snmp_max_consecutive_fails"` // Circuit breaker: max consecutive SNMP failures before suspension
-	SNMPBackoffDuration   time.Duration  `yaml:"snmp_backoff_duration"`  // Circuit breaker: SNMP suspension duration after max failures
-	InfluxDB              InfluxDBConfig `yaml:"influxdb"`
-	HealthCheckPort       int            `yaml:"health_check_port"`    // HTTP health check endpoint port
-	HealthReportInterval  time.Duration  `yaml:"health_report_interval"` // Interval for writing health metrics
+	IcmpDiscoveryInterval   time.Duration  `yaml:"icmp_discovery_interval"`
+	IcmpWorkers             int            `yaml:"icmp_workers"`
+	SnmpWorkers             int            `yaml:"snmp_workers"`
+	Networks                []string       `yaml:"networks"`
+	SNMP                    SNMPConfig     `yaml:"snmp"`
+	PingInterval            time.Duration  `yaml:"ping_interval"`
+	PingTimeout             time.Duration  `yaml:"ping_timeout"`
+	PingRateLimit           float64        `yaml:"ping_rate_limit"`            // Tokens per second (sustained ping rate)
+	PingBurstLimit          int            `yaml:"ping_burst_limit"`           // Token bucket capacity (max burst)
+	PingMaxConsecutiveFails int            `yaml:"ping_max_consecutive_fails"` // Circuit breaker: max consecutive failures before suspension
+	PingBackoffDuration     time.Duration  `yaml:"ping_backoff_duration"`      // Circuit breaker: suspension duration after max failures
+	SNMPInterval            time.Duration  `yaml:"snmp_interval"`              // Interval for continuous SNMP polling per device
+	SNMPRateLimit           float64        `yaml:"snmp_rate_limit"`            // Tokens per second (sustained SNMP query rate)
+	SNMPBurstLimit          int            `yaml:"snmp_burst_limit"`           // Token bucket capacity (max SNMP burst)
+	SNMPMaxConsecutiveFails int            `yaml:"snmp_max_consecutive_fails"` // Circuit breaker: max consecutive SNMP failures before suspension
+	SNMPBackoffDuration     time.Duration  `yaml:"snmp_backoff_duration"`      // Circuit breaker: SNMP suspension duration after max failures
+	InfluxDB                InfluxDBConfig `yaml:"influxdb"`
+	HealthCheckPort         int            `yaml:"health_check_port"`      // HTTP health check endpoint port
+	HealthReportInterval    time.Duration  `yaml:"health_report_interval"` // Interval for writing health metrics
 	// Resource protection settings
-	MaxConcurrentPingers  int           `yaml:"max_concurrent_pingers"`
-	MaxConcurrentSNMPPollers int        `yaml:"max_concurrent_snmp_pollers"` // Maximum concurrent SNMP poller goroutines
-	MaxDevices            int           `yaml:"max_devices"`
-	MinScanInterval       time.Duration `yaml:"min_scan_interval"`
-	MemoryLimitMB         int           `yaml:"memory_limit_mb"`
+	MaxConcurrentPingers     int           `yaml:"max_concurrent_pingers"`
+	MaxConcurrentSNMPPollers int           `yaml:"max_concurrent_snmp_pollers"` // Maximum concurrent SNMP poller goroutines
+	MaxDevices               int           `yaml:"max_devices"`
+	MinScanInterval          time.Duration `yaml:"min_scan_interval"`
+	MemoryLimitMB            int           `yaml:"memory_limit_mb"`
 }
 
 // LoadConfig parses YAML configuration file and returns Config struct
@@ -69,22 +70,22 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Raw config struct for YAML parsing with string duration fields
 	var raw struct {
-		IcmpDiscoveryInterval   string   `yaml:"icmp_discovery_interval"`
-		IcmpWorkers             int      `yaml:"icmp_workers"`
-		SnmpWorkers             int      `yaml:"snmp_workers"`
-		Networks                []string `yaml:"networks"`
+		IcmpDiscoveryInterval   string     `yaml:"icmp_discovery_interval"`
+		IcmpWorkers             int        `yaml:"icmp_workers"`
+		SnmpWorkers             int        `yaml:"snmp_workers"`
+		Networks                []string   `yaml:"networks"`
 		SNMP                    SNMPConfig `yaml:"snmp"`
-		PingInterval            string   `yaml:"ping_interval"`
-		PingTimeout             string   `yaml:"ping_timeout"`
-		PingRateLimit           float64  `yaml:"ping_rate_limit"`
-		PingBurstLimit          int      `yaml:"ping_burst_limit"`
-		PingMaxConsecutiveFails int      `yaml:"ping_max_consecutive_fails"`
-		PingBackoffDuration     string   `yaml:"ping_backoff_duration"`
-		SNMPInterval            string   `yaml:"snmp_interval"`
-		SNMPRateLimit           float64  `yaml:"snmp_rate_limit"`
-		SNMPBurstLimit          int      `yaml:"snmp_burst_limit"`
-		SNMPMaxConsecutiveFails int      `yaml:"snmp_max_consecutive_fails"`
-		SNMPBackoffDuration     string   `yaml:"snmp_backoff_duration"`
+		PingInterval            string     `yaml:"ping_interval"`
+		PingTimeout             string     `yaml:"ping_timeout"`
+		PingRateLimit           float64    `yaml:"ping_rate_limit"`
+		PingBurstLimit          int        `yaml:"ping_burst_limit"`
+		PingMaxConsecutiveFails int        `yaml:"ping_max_consecutive_fails"`
+		PingBackoffDuration     string     `yaml:"ping_backoff_duration"`
+		SNMPInterval            string     `yaml:"snmp_interval"`
+		SNMPRateLimit           float64    `yaml:"snmp_rate_limit"`
+		SNMPBurstLimit          int        `yaml:"snmp_burst_limit"`
+		SNMPMaxConsecutiveFails int        `yaml:"snmp_max_consecutive_fails"`
+		SNMPBackoffDuration     string     `yaml:"snmp_backoff_duration"`
 		InfluxDB                struct {
 			URL           string `yaml:"url"`
 			Token         string `yaml:"token"`
@@ -92,10 +93,11 @@ func LoadConfig(path string) (*Config, error) {
 			Bucket        string `yaml:"bucket"`
 			HealthBucket  string `yaml:"health_bucket"`
 			BatchSize     int    `yaml:"batch_size"`
+			BufferSize    int    `yaml:"buffer_size"`
 			FlushInterval string `yaml:"flush_interval"`
 		} `yaml:"influxdb"`
-		HealthCheckPort       int    `yaml:"health_check_port"`
-		HealthReportInterval  string `yaml:"health_report_interval"`
+		HealthCheckPort      int    `yaml:"health_check_port"`
+		HealthReportInterval string `yaml:"health_report_interval"`
 		// Resource protection settings
 		MaxConcurrentPingers     int    `yaml:"max_concurrent_pingers"`
 		MaxConcurrentSNMPPollers int    `yaml:"max_concurrent_snmp_pollers"`
@@ -118,7 +120,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid ping_interval: %v", err)
 	}
-	
+
 	// Parse ping_timeout with default if not specified
 	var pingTimeout time.Duration
 	if raw.PingTimeout != "" {
@@ -213,6 +215,9 @@ func LoadConfig(path string) (*Config, error) {
 	if raw.InfluxDB.BatchSize == 0 {
 		raw.InfluxDB.BatchSize = 5000 // Default: batch 5000 points
 	}
+	if raw.InfluxDB.BufferSize == 0 {
+		raw.InfluxDB.BufferSize = 100000 // Default: buffer 100000 points (~10s at 10k devices)
+	}
 	if flushInterval == 0 {
 		flushInterval = 5 * time.Second // Default: flush every 5 seconds
 	}
@@ -297,6 +302,7 @@ func LoadConfig(path string) (*Config, error) {
 			Bucket:        raw.InfluxDB.Bucket,
 			HealthBucket:  raw.InfluxDB.HealthBucket,
 			BatchSize:     raw.InfluxDB.BatchSize,
+			BufferSize:    raw.InfluxDB.BufferSize,
 			FlushInterval: flushInterval,
 		},
 		HealthCheckPort:          raw.HealthCheckPort,
@@ -552,26 +558,26 @@ func validateTimeFormat(timeStr string) error {
 	if len(timeStr) != 5 {
 		return fmt.Errorf("time must be in HH:MM format, got %s", timeStr)
 	}
-	
+
 	parts := strings.Split(timeStr, ":")
 	if len(parts) != 2 {
 		return fmt.Errorf("time must be in HH:MM format, got %s", timeStr)
 	}
-	
+
 	// Parse hours
 	var hour, minute int
 	_, err := fmt.Sscanf(timeStr, "%02d:%02d", &hour, &minute)
 	if err != nil {
 		return fmt.Errorf("invalid time format %s: %v", timeStr, err)
 	}
-	
+
 	if hour < 0 || hour > 23 {
 		return fmt.Errorf("hour must be between 00 and 23, got %d", hour)
 	}
 	if minute < 0 || minute > 59 {
 		return fmt.Errorf("minute must be between 00 and 59, got %d", minute)
 	}
-	
+
 	return nil
 }
 

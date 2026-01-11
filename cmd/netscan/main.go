@@ -54,6 +54,7 @@ func main() {
 		cfg.InfluxDB.Bucket,
 		cfg.InfluxDB.HealthBucket,
 		cfg.InfluxDB.BatchSize,
+		cfg.InfluxDB.BufferSize,
 		cfg.InfluxDB.FlushInterval,
 	)
 	defer writer.Close()
@@ -85,13 +86,13 @@ func main() {
 
 	// Initialize atomic counter for tracking in-flight pings
 	var currentInFlightPings atomic.Int64
-	
+
 	// Initialize atomic counter for total pings sent (for observability/metrics)
 	var totalPingsSent atomic.Uint64
 
 	// Initialize atomic counter for tracking in-flight SNMP queries
 	var currentInFlightSNMPQueries atomic.Int64
-	
+
 	// Initialize atomic counter for total SNMP queries sent (for observability/metrics)
 	var totalSNMPQueries atomic.Uint64
 
@@ -184,7 +185,7 @@ func main() {
 	log.Info().Strs("networks", cfg.Networks).Msg("Scanning networks")
 	responsiveIPs := discovery.RunICMPSweep(mainCtx, cfg.Networks, cfg.IcmpWorkers, pingRateLimiter)
 	log.Info().Int("devices_found", len(responsiveIPs)).Msg("ICMP discovery completed")
-	
+
 	for _, ip := range responsiveIPs {
 		isNew := stateMgr.AddDevice(ip)
 		if isNew {
@@ -303,13 +304,13 @@ func main() {
 		case <-mainCtx.Done():
 			// Graceful shutdown
 			log.Info().Msg("Shutting down all pingers and SNMP pollers...")
-			
+
 			// Stop all tickers
 			icmpDiscoveryTicker.Stop()
 			reconciliationTicker.Stop()
 			snmpReconciliationTicker.Stop()
 			pruningTicker.Stop()
-			
+
 			// Cancel all active pingers
 			pingersMu.Lock()
 			for ip, cancel := range activePingers {
@@ -317,7 +318,7 @@ func main() {
 				cancel()
 			}
 			pingersMu.Unlock()
-			
+
 			// Cancel all active SNMP pollers
 			snmpPollersMu.Lock()
 			for ip, cancel := range activeSNMPPollers {
@@ -325,15 +326,15 @@ func main() {
 				cancel()
 			}
 			snmpPollersMu.Unlock()
-			
+
 			// Wait for all pingers to exit
 			log.Info().Msg("Waiting for all pingers to stop...")
 			pingerWg.Wait()
-			
+
 			// Wait for all SNMP pollers to exit
 			log.Info().Msg("Waiting for all SNMP pollers to stop...")
 			snmpPollerWg.Wait()
-			
+
 			log.Info().Msg("Shutdown complete")
 			return
 
@@ -344,7 +345,7 @@ func main() {
 			log.Info().Strs("networks", cfg.Networks).Msg("Scanning networks")
 			responsiveIPs := discovery.RunICMPSweep(mainCtx, cfg.Networks, cfg.IcmpWorkers, pingRateLimiter)
 			log.Info().Int("devices_found", len(responsiveIPs)).Msg("ICMP discovery completed")
-			
+
 			for _, ip := range responsiveIPs {
 				isNew := stateMgr.AddDevice(ip)
 				if isNew {
@@ -387,7 +388,7 @@ func main() {
 		case <-reconciliationTicker.C:
 			// Pinger Reconciliation: Ensure all devices have pingers
 			pingersMu.Lock()
-			
+
 			// Get current state IPs
 			currentIPs := stateMgr.GetAllIPs()
 			// Pre-allocate map with exact capacity to avoid reallocation (performance optimization)
@@ -395,13 +396,13 @@ func main() {
 			for _, ip := range currentIPs {
 				currentIPMap[ip] = true
 			}
-			
+
 			// Start pingers for new devices
 			// CRITICAL: Check both activePingers AND stoppingPingers to prevent race condition
 			for ip := range currentIPMap {
 				_, isActive := activePingers[ip]
 				_, isStopping := stoppingPingers[ip]
-				
+
 				// Only start pinger if IP is not active AND not currently stopping
 				if !isActive && !isStopping {
 					if len(activePingers) >= cfg.MaxConcurrentPingers {
@@ -414,13 +415,13 @@ func main() {
 					log.Debug().Str("ip", ip).Msg("Starting continuous pinger")
 					pingerCtx, pingerCancel := context.WithCancel(mainCtx)
 					activePingers[ip] = pingerCancel
-					
+
 					// Get device info for logging
 					dev, exists := stateMgr.Get(ip)
 					if !exists {
 						dev = &state.Device{IP: ip, Hostname: ip}
 					}
-					
+
 					pingerWg.Add(1)
 					// Create a wrapper goroutine to handle exit notification
 					go func(d state.Device, ctx context.Context) {
@@ -433,10 +434,10 @@ func main() {
 									Msg("Pinger wrapper panic recovered")
 							}
 						}()
-						
+
 						// Run the actual pinger
 						monitoring.StartPinger(ctx, &pingerWg, d, cfg.PingInterval, cfg.PingTimeout, writer, stateMgr, pingRateLimiter, &currentInFlightPings, &totalPingsSent, cfg.PingMaxConsecutiveFails, cfg.PingBackoffDuration)
-						
+
 						// Notify that this pinger has exited
 						select {
 						case pingerExitChan <- d.IP:
@@ -451,28 +452,28 @@ func main() {
 						Msg("Pinger is stopping, will start new one after exit completes")
 				}
 			}
-			
+
 			// Stop pingers for removed devices
 			// CRITICAL: Move to stoppingPingers first, then call cancelFunc
 			for ip, cancelFunc := range activePingers {
 				if !currentIPMap[ip] {
 					log.Debug().Str("ip", ip).Msg("Stopping continuous pinger for stale device")
-					
+
 					// Move to stoppingPingers BEFORE calling cancelFunc
 					stoppingPingers[ip] = true
 					delete(activePingers, ip)
-					
+
 					// Now call cancelFunc (asynchronous - doesn't wait for goroutine exit)
 					cancelFunc()
 				}
 			}
-			
+
 			pingersMu.Unlock()
 
 		case <-snmpReconciliationTicker.C:
 			// SNMP Poller Reconciliation: Ensure all devices have SNMP pollers
 			snmpPollersMu.Lock()
-			
+
 			// Get current state IPs
 			currentIPs := stateMgr.GetAllIPs()
 			// Pre-allocate map with exact capacity to avoid reallocation (performance optimization)
@@ -480,13 +481,13 @@ func main() {
 			for _, ip := range currentIPs {
 				currentIPMap[ip] = true
 			}
-			
+
 			// Start SNMP pollers for new devices
 			// CRITICAL: Check both activeSNMPPollers AND stoppingSNMPPollers to prevent race condition
 			for ip := range currentIPMap {
 				_, isActive := activeSNMPPollers[ip]
 				_, isStopping := stoppingSNMPPollers[ip]
-				
+
 				// Only start SNMP poller if IP is not active AND not currently stopping
 				if !isActive && !isStopping {
 					if len(activeSNMPPollers) >= cfg.MaxConcurrentSNMPPollers {
@@ -499,13 +500,13 @@ func main() {
 					log.Debug().Str("ip", ip).Msg("Starting continuous SNMP poller")
 					snmpPollerCtx, snmpPollerCancel := context.WithCancel(mainCtx)
 					activeSNMPPollers[ip] = snmpPollerCancel
-					
+
 					// Get device info for logging
 					dev, exists := stateMgr.Get(ip)
 					if !exists {
 						dev = &state.Device{IP: ip, Hostname: ip}
 					}
-					
+
 					snmpPollerWg.Add(1)
 					// Create a wrapper goroutine to handle exit notification
 					go func(d state.Device, ctx context.Context) {
@@ -518,10 +519,10 @@ func main() {
 									Msg("SNMP poller wrapper panic recovered")
 							}
 						}()
-						
+
 						// Run the actual SNMP poller
 						monitoring.StartSNMPPoller(ctx, &snmpPollerWg, d, cfg.SNMPInterval, &cfg.SNMP, writer, stateMgr, snmpRateLimiter, &currentInFlightSNMPQueries, &totalSNMPQueries, cfg.SNMPMaxConsecutiveFails, cfg.SNMPBackoffDuration)
-						
+
 						// Notify that this SNMP poller has exited
 						select {
 						case snmpPollerExitChan <- d.IP:
@@ -536,22 +537,22 @@ func main() {
 						Msg("SNMP poller is stopping, will start new one after exit completes")
 				}
 			}
-			
+
 			// Stop SNMP pollers for removed devices
 			// CRITICAL: Move to stoppingSNMPPollers first, then call cancelFunc
 			for ip, cancelFunc := range activeSNMPPollers {
 				if !currentIPMap[ip] {
 					log.Debug().Str("ip", ip).Msg("Stopping continuous SNMP poller for stale device")
-					
+
 					// Move to stoppingSNMPPollers BEFORE calling cancelFunc
 					stoppingSNMPPollers[ip] = true
 					delete(activeSNMPPollers, ip)
-					
+
 					// Now call cancelFunc (asynchronous - doesn't wait for goroutine exit)
 					cancelFunc()
 				}
 			}
-			
+
 			snmpPollersMu.Unlock()
 
 		case <-pruningTicker.C:
@@ -572,23 +573,23 @@ func main() {
 			// Health Report: Write health metrics to InfluxDB
 			log.Debug().Msg("Writing health metrics...")
 			metrics := healthServer.GetHealthMetrics()
-			
+
 			// Load total pings sent counter
 			pingsSent := totalPingsSent.Load()
-			
+
 			writer.WriteHealthMetrics(
 				metrics.DeviceCount,
 				metrics.ActivePingers,
 				metrics.Goroutines,
 				int(metrics.MemoryMB),
-				int(metrics.RSSMB), // new RSS value (MB)
+				int(metrics.RSSMB),       // new RSS value (MB)
 				metrics.SuspendedDevices, // suspended device count
 				metrics.InfluxDBOK,
 				metrics.InfluxDBSuccessful,
 				metrics.InfluxDBFailed,
-				pingsSent, // total pings sent counter
+				metrics.DroppedPoints, // dropped points count
+				pingsSent,             // total pings sent counter
 			)
 		}
 	}
 }
-

@@ -36,10 +36,11 @@ type Writer struct {
 	// Metrics tracking with atomic counters
 	successfulBatches atomic.Uint64
 	failedBatches     atomic.Uint64
+	droppedPoints     atomic.Uint64
 }
 
 // NewWriter creates a new InfluxDB writer with batching support
-func NewWriter(url, token, org, bucket, healthBucket string, batchSize int, flushInterval time.Duration) *Writer {
+func NewWriter(url, token, org, bucket, healthBucket string, batchSize int, bufferSize int, flushInterval time.Duration) *Writer {
 	client := influxdb2.NewClient(url, token)
 	writeAPI := client.WriteAPI(org, bucket)
 	healthWriteAPI := client.WriteAPI(org, healthBucket)
@@ -52,9 +53,9 @@ func NewWriter(url, token, org, bucket, healthBucket string, batchSize int, flus
 		healthWriteAPI:   healthWriteAPI,
 		org:              org,
 		bucket:           bucket,
-		primaryErrorChan: writeAPI.Errors(),     // Call Errors() only once during initialization
-		healthErrorChan:  healthWriteAPI.Errors(), // Call Errors() only once during initialization
-		batchChan:        make(chan *write.Point, batchSize*2), // Buffered channel for lock-free writes
+		primaryErrorChan: writeAPI.Errors(),                   // Call Errors() only once during initialization
+		healthErrorChan:  healthWriteAPI.Errors(),             // Call Errors() only once during initialization
+		batchChan:        make(chan *write.Point, bufferSize), // Buffered channel for lock-free writes
 		batchSize:        batchSize,
 		flushTicker:      time.NewTicker(flushInterval),
 		ctx:              ctx,
@@ -101,7 +102,7 @@ func (w *Writer) backgroundFlusher() {
 		case point := <-w.batchChan:
 			// Accumulate point
 			batch = append(batch, point)
-			
+
 			// Flush when batch is full
 			if len(batch) >= w.batchSize {
 				w.flushBatch(batch)
@@ -209,8 +210,8 @@ func (w *Writer) WriteDeviceInfo(ip, hostname, sysDescr string) error {
 }
 
 // WriteHealthMetrics writes application health metrics to InfluxDB health bucket
-// Updated to include OS-level RSS in MB (rssMB), suspended device count, and total pings sent.
-func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB, rssMB, suspendedCount int, influxOK bool, influxSuccess, influxFailed, pingsSentTotal uint64) {
+// Updated to include dropped points metric
+func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB, rssMB, suspendedCount int, influxOK bool, influxSuccess, influxFailed, droppedPoints, pingsSentTotal uint64) {
 	log.Debug().
 		Int("device_count", deviceCount).
 		Int("active_pingers", pingerCount).
@@ -220,6 +221,7 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 		Int("rss_mb", rssMB).
 		Bool("influxdb_ok", influxOK).
 		Uint64("pings_sent_total", pingsSentTotal).
+		Uint64("dropped_points", droppedPoints).
 		Msg("Writing health metrics to InfluxDB")
 
 	p := influxdb2.NewPoint(
@@ -235,6 +237,7 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 			"influxdb_ok":                 influxOK,
 			"influxdb_successful_batches": influxSuccess,
 			"influxdb_failed_batches":     influxFailed,
+			"influxdb_dropped_points":     droppedPoints,
 			"pings_sent_total":            pingsSentTotal,
 		},
 		time.Now(),
@@ -283,7 +286,8 @@ func (w *Writer) addToBatch(point *write.Point) {
 	case <-w.ctx.Done():
 		// Context cancelled, drop point
 	default:
-		// Channel full, log warning but don't block
+		// Channel full, drop point and increment counter
+		w.droppedPoints.Add(1)
 		log.Warn().Msg("Batch channel full, dropping point to avoid blocking")
 	}
 }
@@ -357,13 +361,18 @@ func (w *Writer) GetFailedBatches() uint64 {
 	return w.failedBatches.Load()
 }
 
+// GetDroppedPoints returns the number of points dropped due to full buffer
+func (w *Writer) GetDroppedPoints() uint64 {
+	return w.droppedPoints.Load()
+}
+
 // Close terminates the InfluxDB client connection
 func (w *Writer) Close() {
-	w.cancel()           // Stop background flusher (which will drain remaining points)
-	w.flushTicker.Stop() // Stop flush ticker
+	w.cancel()                         // Stop background flusher (which will drain remaining points)
+	w.flushTicker.Stop()               // Stop flush ticker
 	time.Sleep(100 * time.Millisecond) // Give background flusher time to finish
-	w.writeAPI.Flush()   // Flush primary write API buffer
-	w.healthWriteAPI.Flush() // Flush health write API buffer
+	w.writeAPI.Flush()                 // Flush primary write API buffer
+	w.healthWriteAPI.Flush()           // Flush health write API buffer
 	w.client.Close()
 }
 
