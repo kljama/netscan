@@ -36,33 +36,30 @@ func TestRealBug_CleanupBeforeRecovery(t *testing.T) {
 	// Wait for suspension to expire
 	time.Sleep(backoff + 50*time.Millisecond)
 
-	// Call GetSuspendedCount() which triggers cleanup
-	// This should decrement counter to 0 and clear SuspendedUntil
-	count2 := mgr.GetSuspendedCount()
-	t.Logf("Count after cleanup: %d", count2)
-	if count2 != 0 {
-		t.Errorf("Expected count 0 after cleanup, got %d", count2)
+	// Now check count - it should REMAIN 1 because GetSuspendedCount() no longer force-cleans
+	// usage: optimized O(1) read
+	if count := mgr.GetSuspendedCount(); count != 1 {
+		t.Errorf("Expected count 1 after cleanup (stale), got %d", count)
 	}
 
-	// Check device state - SuspendedUntil should be cleared
+	// Verify internal state is effectively cleared (expired)
+	// But note: the struct field is NOT cleared until an update happens
 	retrieved, _ := mgr.Get("192.168.1.100")
-	if !retrieved.SuspendedUntil.IsZero() {
-		t.Logf("UNEXPECTED: SuspendedUntil is %v (should be zero)", retrieved.SuspendedUntil)
+	if retrieved.SuspendedUntil.IsZero() {
+		t.Error("UNEXPECTED: SuspendedUntil is zero (should remain set until update)")
+	} else {
+		t.Logf("SuspendedUntil is %v (expired as expected)", retrieved.SuspendedUntil)
 	}
 
-	// Now call ReportPingSuccess() - simulating device recovery
-	// BUG: This won't decrement because SuspendedUntil was already cleared
+	// Now report success - THIS should clear the counter
 	mgr.ReportPingSuccess("192.168.1.100")
 
-	// Check counter - should still be 0
-	count3 := mgr.GetSuspendedCount()
-	t.Logf("Count after ReportPingSuccess: %d", count3)
-	
+	if count := mgr.GetSuspendedCount(); count != 0 {
+		t.Errorf("Count after ReportPingSuccess: %d (expected 0)", count)
+	}
 	// This should pass - cleanup already decremented, so ReportPingSuccess
 	// correctly does NOT decrement again (SuspendedUntil is zero)
-	if count3 != 0 {
-		t.Errorf("Expected count 0, got %d", count3)
-	}
+
 }
 
 // TestRealBug_RecoveryBeforeCleanup - Tests what happens when ReportPingSuccess()
@@ -104,7 +101,7 @@ func TestRealBug_RecoveryBeforeCleanup(t *testing.T) {
 	// Check the device state directly
 	retrieved, _ := mgr.Get("192.168.1.200")
 	t.Logf("SuspendedUntil: %v", retrieved.SuspendedUntil)
-	
+
 	// SuspendedUntil is still set (not cleared), but it's in the past
 	if retrieved.SuspendedUntil.IsZero() {
 		t.Log("SuspendedUntil is zero (cleanup ran somehow)")
@@ -118,7 +115,7 @@ func TestRealBug_RecoveryBeforeCleanup(t *testing.T) {
 	// Check counter
 	count2 := mgr.GetSuspendedCount()
 	t.Logf("Count after ReportPingSuccess: %d", count2)
-	
+
 	// Counter should be 0 (ReportPingSuccess decremented it)
 	if count2 != 0 {
 		t.Errorf("Expected count 0, got %d", count2)

@@ -9,15 +9,15 @@ import (
 
 // Device represents a discovered network device with metadata
 type Device struct {
-	IP                     string    // IPv4 address of the device
-	Hostname               string    // Device hostname from SNMP or IP address
-	SysDescr               string    // SNMP sysDescr MIB-II value
-	LastSeen               time.Time // Timestamp of last successful discovery
-	ConsecutiveFails       int       // Number of consecutive ping failures (circuit breaker)
-	SuspendedUntil         time.Time // Timestamp until which device is suspended (circuit breaker)
-	SNMPConsecutiveFails   int       // Number of consecutive SNMP failures (SNMP circuit breaker)
-	SNMPSuspendedUntil     time.Time // Timestamp until which SNMP polling is suspended (SNMP circuit breaker)
-	heapIndex              int       // Index in the min-heap for O(log n) eviction (internal use only)
+	IP                   string    // IPv4 address of the device
+	Hostname             string    // Device hostname from SNMP or IP address
+	SysDescr             string    // SNMP sysDescr MIB-II value
+	LastSeen             time.Time // Timestamp of last successful discovery
+	ConsecutiveFails     int       // Number of consecutive ping failures (circuit breaker)
+	SuspendedUntil       time.Time // Timestamp until which device is suspended (circuit breaker)
+	SNMPConsecutiveFails int       // Number of consecutive SNMP failures (SNMP circuit breaker)
+	SNMPSuspendedUntil   time.Time // Timestamp until which SNMP polling is suspended (SNMP circuit breaker)
+	heapIndex            int       // Index in the min-heap for O(log n) eviction (internal use only)
 }
 
 // deviceHeap implements heap.Interface for min-heap ordered by LastSeen timestamp
@@ -48,20 +48,20 @@ func (h *deviceHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	device := old[n-1]
-	old[n-1] = nil         // Avoid memory leak
-	device.heapIndex = -1  // Mark as not in heap
+	old[n-1] = nil        // Avoid memory leak
+	device.heapIndex = -1 // Mark as not in heap
 	*h = old[0 : n-1]
 	return device
 }
 
 // Manager provides thread-safe device state management with O(log n) LRU eviction
 type Manager struct {
-	devices             map[string]*Device // Map IP addresses to device pointers
-	evictionHeap        deviceHeap         // Min-heap for O(log n) LRU eviction
-	mu                  sync.RWMutex       // Protects concurrent access to devices map and heap
-	maxDevices          int                // Maximum number of devices to manage
-	suspendedCount      atomic.Int32       // Cached count of ping-suspended devices (for O(1) reads)
-	snmpSuspendedCount  atomic.Int32       // Cached count of SNMP-suspended devices (for O(1) reads)
+	devices            map[string]*Device // Map IP addresses to device pointers
+	evictionHeap       deviceHeap         // Min-heap for O(log n) LRU eviction
+	mu                 sync.RWMutex       // Protects concurrent access to devices map and heap
+	maxDevices         int                // Maximum number of devices to manage
+	suspendedCount     atomic.Int32       // Cached count of ping-suspended devices (for O(1) reads)
+	snmpSuspendedCount atomic.Int32       // Cached count of SNMP-suspended devices (for O(1) reads)
 }
 
 // NewManager creates a new device state manager with heap-based LRU eviction
@@ -88,7 +88,7 @@ func (m *Manager) Add(device Device) {
 	// If device already exists, update it
 	if existing, exists := m.devices[device.IP]; exists {
 		now := time.Now()
-		
+
 		// Clean up expired suspensions in the EXISTING device before comparison
 		// This ensures the counter is decremented for expired suspensions
 		if !existing.SuspendedUntil.IsZero() && !now.Before(existing.SuspendedUntil) {
@@ -103,7 +103,7 @@ func (m *Manager) Add(device Device) {
 			existing.SNMPSuspendedUntil = time.Time{}
 			existing.SNMPConsecutiveFails = 0
 		}
-		
+
 		// Clean up expired suspensions in the incoming device before comparison
 		if !device.SuspendedUntil.IsZero() && !now.Before(device.SuspendedUntil) {
 			device.SuspendedUntil = time.Time{}
@@ -113,34 +113,34 @@ func (m *Manager) Add(device Device) {
 			device.SNMPSuspendedUntil = time.Time{}
 			device.SNMPConsecutiveFails = 0
 		}
-		
+
 		// Track suspension state changes for atomic counter
 		// After cleanup, check if state is changing
 		wasActivelySuspended := !existing.SuspendedUntil.IsZero() && now.Before(existing.SuspendedUntil)
 		willBeActivelySuspended := !device.SuspendedUntil.IsZero() && now.Before(device.SuspendedUntil)
-		
+
 		// Track SNMP suspension state changes for atomic counter
 		wasActivelySNMPSuspended := !existing.SNMPSuspendedUntil.IsZero() && now.Before(existing.SNMPSuspendedUntil)
 		willBeActivelySNMPSuspended := !device.SNMPSuspendedUntil.IsZero() && now.Before(device.SNMPSuspendedUntil)
-		
+
 		// Update the atomic counter based on state change
 		if !wasActivelySuspended && willBeActivelySuspended {
 			m.suspendedCount.Add(1) // Device became suspended
 		} else if wasActivelySuspended && !willBeActivelySuspended {
 			m.suspendedCount.Add(-1) // Device no longer suspended
 		}
-		
+
 		// Update the SNMP atomic counter based on state change
 		if !wasActivelySNMPSuspended && willBeActivelySNMPSuspended {
 			m.snmpSuspendedCount.Add(1) // SNMP polling became suspended
 		} else if wasActivelySNMPSuspended && !willBeActivelySNMPSuspended {
 			m.snmpSuspendedCount.Add(-1) // SNMP polling no longer suspended
 		}
-		
+
 		// Update device fields
 		oldLastSeen := existing.LastSeen
 		*existing = device
-		
+
 		// If LastSeen changed, update heap position (O(log n))
 		if !device.LastSeen.Equal(oldLastSeen) && existing.heapIndex >= 0 {
 			heap.Fix(&m.evictionHeap, existing.heapIndex)
@@ -153,17 +153,17 @@ func (m *Manager) Add(device Device) {
 		// Remove the oldest device using heap (O(log n) instead of O(n))
 		if m.evictionHeap.Len() > 0 {
 			oldest := heap.Pop(&m.evictionHeap).(*Device)
-			
+
 			// If the device being evicted was ping-suspended, decrement counter
 			if !oldest.SuspendedUntil.IsZero() && time.Now().Before(oldest.SuspendedUntil) {
 				m.suspendedCount.Add(-1)
 			}
-			
+
 			// If the device being evicted had SNMP suspended, decrement counter
 			if !oldest.SNMPSuspendedUntil.IsZero() && time.Now().Before(oldest.SNMPSuspendedUntil) {
 				m.snmpSuspendedCount.Add(-1)
 			}
-			
+
 			delete(m.devices, oldest.IP)
 		}
 	}
@@ -181,17 +181,17 @@ func (m *Manager) Add(device Device) {
 		device.SNMPSuspendedUntil = time.Time{}
 		device.SNMPConsecutiveFails = 0
 	}
-	
+
 	// If the new device is actively ping-suspended, increment the counter
 	if !device.SuspendedUntil.IsZero() && now.Before(device.SuspendedUntil) {
 		m.suspendedCount.Add(1)
 	}
-	
+
 	// If the new device has SNMP actively suspended, increment the counter
 	if !device.SNMPSuspendedUntil.IsZero() && now.Before(device.SNMPSuspendedUntil) {
 		m.snmpSuspendedCount.Add(1)
 	}
-	
+
 	devicePtr := &device
 	m.devices[device.IP] = devicePtr
 	heap.Push(&m.evictionHeap, devicePtr)
@@ -213,17 +213,17 @@ func (m *Manager) AddDevice(ip string) bool {
 		// Remove the oldest device using heap (O(log n) instead of O(n))
 		if m.evictionHeap.Len() > 0 {
 			oldest := heap.Pop(&m.evictionHeap).(*Device)
-			
+
 			// If the device being evicted was ping-suspended, decrement counter
 			if !oldest.SuspendedUntil.IsZero() && time.Now().Before(oldest.SuspendedUntil) {
 				m.suspendedCount.Add(-1)
 			}
-			
+
 			// If the device being evicted had SNMP suspended, decrement counter
 			if !oldest.SNMPSuspendedUntil.IsZero() && time.Now().Before(oldest.SNMPSuspendedUntil) {
 				m.snmpSuspendedCount.Add(-1)
 			}
-			
+
 			delete(m.devices, oldest.IP)
 		}
 	}
@@ -306,14 +306,14 @@ func (m *Manager) Prune(olderThan time.Duration) []Device {
 	defer m.mu.Unlock()
 	var removed []Device
 	cutoff := time.Now().Add(-olderThan)
-	
+
 	// Collect devices to remove
 	var toRemove []*Device
 	for ip, dev := range m.devices {
 		if dev.LastSeen.Before(cutoff) {
 			removed = append(removed, *dev)
 			toRemove = append(toRemove, dev)
-			
+
 			// If the pruned device has a suspension (active or expired), decrement counter
 			// This catches both active suspensions (SuspendedUntil in future) and expired
 			// suspensions (SuspendedUntil in past) to prevent orphaned counts when devices
@@ -321,17 +321,17 @@ func (m *Manager) Prune(olderThan time.Duration) []Device {
 			if !dev.SuspendedUntil.IsZero() {
 				m.suspendedCount.Add(-1)
 			}
-			
+
 			// If the pruned device has SNMP suspension (active or expired), decrement counter
 			// Same logic as ping suspension - catches both active and expired to prevent orphans
 			if !dev.SNMPSuspendedUntil.IsZero() {
 				m.snmpSuspendedCount.Add(-1)
 			}
-			
+
 			delete(m.devices, ip)
 		}
 	}
-	
+
 	// Remove from heap - rebuild is more efficient for bulk removals
 	if len(toRemove) > 0 {
 		// Build new heap excluding removed devices
@@ -344,7 +344,7 @@ func (m *Manager) Prune(olderThan time.Duration) []Device {
 		m.evictionHeap = newHeap
 		heap.Init(&m.evictionHeap)
 	}
-	
+
 	return removed
 }
 
@@ -386,24 +386,26 @@ func (m *Manager) ReportPingFail(ip string, maxFails int, backoff time.Duration)
 	}
 
 	dev.ConsecutiveFails++
-	
+
 	// Check if we've reached the threshold
 	if dev.ConsecutiveFails >= maxFails {
-		// Check if device is already actively suspended
-		wasAlreadySuspended := !dev.SuspendedUntil.IsZero() && time.Now().Before(dev.SuspendedUntil)
-		
+		// Check if device has a non-zero suspension time (active or expired)
+		// We track "suspended" as any device with a non-zero SuspendedUntil
+		wasCountedAsSuspended := !dev.SuspendedUntil.IsZero()
+
 		// Trip the circuit breaker
 		dev.ConsecutiveFails = 0 // Reset counter
 		dev.SuspendedUntil = time.Now().Add(backoff)
-		
-		// Only increment counter if device was NOT already suspended
-		if !wasAlreadySuspended {
+
+		// Only increment counter if device was NOT already counted as suspended
+		// This prevents "leaking" counts when re-suspending an already suspended (or expired but not cleared) device
+		if !wasCountedAsSuspended {
 			m.suspendedCount.Add(1) // Increment atomic counter
 		}
-		
+
 		return true // Device is now suspended
 	}
-	
+
 	return false // Device not suspended
 }
 
@@ -415,41 +417,15 @@ func (m *Manager) IsSuspended(ip string) bool {
 	if !exists {
 		return false
 	}
-	
+
 	// Device is suspended if SuspendedUntil is set and in the future
 	return !dev.SuspendedUntil.IsZero() && time.Now().Before(dev.SuspendedUntil)
 }
 
-// cleanupExpiredSuspensions removes expired suspensions and updates counters
-// Must be called with m.mu lock held
-func (m *Manager) cleanupExpiredSuspensions() {
-	now := time.Now()
-	for _, dev := range m.devices {
-		// If device has an expired ping suspension, clear it and decrement counter
-		if !dev.SuspendedUntil.IsZero() && !now.Before(dev.SuspendedUntil) {
-			m.suspendedCount.Add(-1)
-			dev.SuspendedUntil = time.Time{} // Clear expired suspension
-			dev.ConsecutiveFails = 0 // Reset failure counter
-		}
-		
-		// If device has an expired SNMP suspension, clear it and decrement counter
-		if !dev.SNMPSuspendedUntil.IsZero() && !now.Before(dev.SNMPSuspendedUntil) {
-			m.snmpSuspendedCount.Add(-1)
-			dev.SNMPSuspendedUntil = time.Time{} // Clear expired SNMP suspension
-			dev.SNMPConsecutiveFails = 0 // Reset SNMP failure counter
-		}
-	}
-}
-
-// GetSuspendedCount returns the number of currently suspended devices
-// This method cleans up expired suspensions to ensure the counter stays accurate
+// GetSuspendedCount returns the number of devices tracked as suspended
+// Returns the atomic counter value immediately (O(1)) without locking/iterating
+// This count includes devices with expired suspensions that haven't been swept yet (upper bound)
 func (m *Manager) GetSuspendedCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	
-	// Clean up expired suspensions to keep counter accurate
-	m.cleanupExpiredSuspensions()
-	
 	return int(m.suspendedCount.Load())
 }
 
@@ -459,7 +435,7 @@ func (m *Manager) GetSuspendedCount() int {
 func (m *Manager) GetSuspendedCountAccurate() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	count := 0
 	now := time.Now()
 	for _, dev := range m.devices {
@@ -497,24 +473,24 @@ func (m *Manager) ReportSNMPFail(ip string, maxFails int, backoff time.Duration)
 	}
 
 	dev.SNMPConsecutiveFails++
-	
+
 	// Check if we've reached the threshold
 	if dev.SNMPConsecutiveFails >= maxFails {
-		// Check if SNMP polling is already actively suspended
-		wasAlreadySuspended := !dev.SNMPSuspendedUntil.IsZero() && time.Now().Before(dev.SNMPSuspendedUntil)
-		
+		// Check if device has a non-zero suspension time (active or expired)
+		wasCountedAsSuspended := !dev.SNMPSuspendedUntil.IsZero()
+
 		// Trip the circuit breaker
 		dev.SNMPConsecutiveFails = 0 // Reset counter
 		dev.SNMPSuspendedUntil = time.Now().Add(backoff)
-		
-		// Only increment counter if SNMP polling was NOT already suspended
-		if !wasAlreadySuspended {
+
+		// Only increment counter if device was NOT already counted as suspended
+		if !wasCountedAsSuspended {
 			m.snmpSuspendedCount.Add(1) // Increment atomic counter
 		}
-		
+
 		return true // SNMP polling is now suspended
 	}
-	
+
 	return false // SNMP polling not suspended
 }
 
@@ -526,19 +502,13 @@ func (m *Manager) IsSNMPSuspended(ip string) bool {
 	if !exists {
 		return false
 	}
-	
+
 	// SNMP polling is suspended if SNMPSuspendedUntil is set and in the future
 	return !dev.SNMPSuspendedUntil.IsZero() && time.Now().Before(dev.SNMPSuspendedUntil)
 }
 
-// GetSNMPSuspendedCount returns the number of devices with SNMP polling currently suspended
-// This method cleans up expired suspensions to ensure the counter stays accurate
+// GetSNMPSuspendedCount returns the number of devices tracked as SNMP-suspended
+// Returns the atomic counter value immediately (O(1)) without locking/iterating
 func (m *Manager) GetSNMPSuspendedCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	
-	// Clean up expired suspensions to keep counter accurate
-	m.cleanupExpiredSuspensions()
-	
 	return int(m.snmpSuspendedCount.Load())
 }

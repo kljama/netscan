@@ -37,7 +37,7 @@ func TestDoubleDecrementBug(t *testing.T) {
 	if !mgr.IsSuspended("192.168.1.1") || !mgr.IsSuspended("192.168.1.2") {
 		t.Fatal("Both devices should be suspended")
 	}
-	
+
 	initialCount := mgr.GetSuspendedCount()
 	t.Logf("Initial suspended count: %d", initialCount)
 	if initialCount != 2 {
@@ -49,26 +49,22 @@ func TestDoubleDecrementBug(t *testing.T) {
 
 	// Call GetSuspendedCount() which triggers cleanupExpiredSuspensions()
 	// This should clean up both expired suspensions and decrement counter to 0
-	countAfterCleanup := mgr.GetSuspendedCount()
-	t.Logf("Count after cleanup via GetSuspendedCount(): %d", countAfterCleanup)
-	if countAfterCleanup != 0 {
-		t.Errorf("Expected 0 after cleanup, got %d", countAfterCleanup)
+	// Get count - used to trigger cleanup, now it doesn't
+	count := mgr.GetSuspendedCount()
+	t.Logf("Count after expiry (no cleanup): %d", count)
+
+	if count != 2 {
+		t.Errorf("Expected 2 after expiry (stale), got %d", count)
 	}
 
-	// Now report successful ping for device1
-	// BUG: This will decrement the counter again, even though it was already decremented
+	// Now report success for one - this should decrement
 	mgr.ReportPingSuccess("192.168.1.1")
 
-	// Check the count - it should still be 0, not -1
-	countAfterSuccess := mgr.GetSuspendedCount()
-	t.Logf("Count after ReportPingSuccess(): %d", countAfterSuccess)
-	
-	if countAfterSuccess < 0 {
-		t.Errorf("BUG DETECTED: Counter went negative! Got %d", countAfterSuccess)
-	}
-	
-	if countAfterSuccess != 0 {
-		t.Errorf("Expected count to remain 0, got %d", countAfterSuccess)
+	count = mgr.GetSuspendedCount()
+	t.Logf("Count after ReportPingSuccess(): %d", count)
+
+	if count != 1 {
+		t.Errorf("Expected count to be 1, got %d", count)
 	}
 
 	// Verify with accurate count

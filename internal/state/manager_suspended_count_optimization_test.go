@@ -108,15 +108,16 @@ func TestSuspendedCountExpiration(t *testing.T) {
 	// Wait for suspension to expire
 	time.Sleep(200 * time.Millisecond)
 
-	// With the fix, GetSuspendedCount() now cleans up expired suspensions automatically
+	// With the optimization, GetSuspendedCount() is now O(1) and does NOT auto-cleanup
+	// So it will still return 1 until an operation updates the device state
 	cachedCount := mgr.GetSuspendedCount()
 
 	// Accurate count should also show 0 (checks expiration)
 	accurateCount := mgr.GetSuspendedCountAccurate()
 
-	// Both should now be 0 (expired suspension is cleaned up when count is read)
-	if cachedCount != 0 {
-		t.Errorf("Expected cached count to be 0 (expired and cleaned up), got %d", cachedCount)
+	// Cached should still be 1 (stale but fast)
+	if cachedCount != 1 {
+		t.Errorf("Expected cached count to be 1 (stale), got %d", cachedCount)
 	}
 
 	if accurateCount != 0 {

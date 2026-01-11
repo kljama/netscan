@@ -1,0 +1,117 @@
+=== RUN   TestRecoveryDuringActiveSuspension
+    manager_active_suspension_recovery_test.go:35: Count before recovery: 1
+    manager_active_suspension_recovery_test.go:51: Count after recovery: 0
+--- PASS: TestRecoveryDuringActiveSuspension (0.00s)
+=== RUN   TestRealBug_CleanupBeforeRecovery
+    manager_actual_bug_test.go:31: Count after suspension: 1
+    manager_actual_bug_test.go:42: Count after cleanup: 1
+    manager_actual_bug_test.go:44: Expected count 0 after cleanup, got 1
+    manager_actual_bug_test.go:50: UNEXPECTED: SuspendedUntil is 2026-01-11 17:23:34.293116907 +0100 CET m=+0.100186924 (should be zero)
+    manager_actual_bug_test.go:59: Count after ReportPingSuccess: 0
+--- FAIL: TestRealBug_CleanupBeforeRecovery (0.15s)
+=== RUN   TestRealBug_RecoveryBeforeCleanup
+    manager_actual_bug_test.go:90: Count after suspension: 1
+    manager_actual_bug_test.go:106: SuspendedUntil: 2026-01-11 17:23:34.443457017 +0100 CET m=+0.250527024
+    manager_actual_bug_test.go:112: SuspendedUntil is still set (cleanup hasn't run)
+    manager_actual_bug_test.go:120: Count after ReportPingSuccess: 0
+--- PASS: TestRealBug_RecoveryBeforeCleanup (0.15s)
+=== RUN   TestBugFixed_ExpiredSuspensionNowDecremented
+    manager_bug_found_test.go:40: Count after suspension: 1
+    manager_bug_found_test.go:59: SuspendedUntil: 2026-01-11 17:23:34.593717374 +0100 CET m=+0.400787381 (expired)
+    manager_bug_found_test.go:77: Accurate count: 0
+    manager_bug_found_test.go:81: Cached count (atomic): 0
+--- PASS: TestBugFixed_ExpiredSuspensionNowDecremented (0.15s)
+=== RUN   TestSameDeviceMultipleSuspensions
+    manager_bug_test.go:40: After suspension 1: suspended_devices count = 1
+    manager_bug_test.go:40: After suspension 2: suspended_devices count = 1
+    manager_bug_test.go:40: After suspension 3: suspended_devices count = 1
+    manager_bug_test.go:40: After suspension 4: suspended_devices count = 1
+    manager_bug_test.go:50: Accurate count: 1
+--- PASS: TestSameDeviceMultipleSuspensions (0.00s)
+=== RUN   TestSameDeviceMultipleSNMPSuspensions
+    manager_bug_test.go:92: After SNMP suspension 1: snmp_suspended_devices count = 1
+    manager_bug_test.go:92: After SNMP suspension 2: snmp_suspended_devices count = 1
+    manager_bug_test.go:92: After SNMP suspension 3: snmp_suspended_devices count = 1
+--- PASS: TestSameDeviceMultipleSNMPSuspensions (0.00s)
+=== RUN   TestMultipleDevicesSuspensions
+--- PASS: TestMultipleDevicesSuspensions (0.00s)
+=== RUN   TestReportPingSuccess
+--- PASS: TestReportPingSuccess (0.00s)
+=== RUN   TestReportPingFailIncrementsCounter
+--- PASS: TestReportPingFailIncrementsCounter (0.00s)
+=== RUN   TestReportPingFailTripsCircuitBreaker
+--- PASS: TestReportPingFailTripsCircuitBreaker (0.00s)
+=== RUN   TestIsSuspendedReturnsTrueWhenSuspended
+--- PASS: TestIsSuspendedReturnsTrueWhenSuspended (0.00s)
+=== RUN   TestIsSuspendedReturnsFalseWhenNotSuspended
+--- PASS: TestIsSuspendedReturnsFalseWhenNotSuspended (0.00s)
+=== RUN   TestIsSuspendedReturnsFalseWhenSuspensionExpired
+--- PASS: TestIsSuspendedReturnsFalseWhenSuspensionExpired (0.00s)
+=== RUN   TestIsSuspendedReturnsFalseForNonexistentDevice
+--- PASS: TestIsSuspendedReturnsFalseForNonexistentDevice (0.00s)
+=== RUN   TestCircuitBreakerFullCycle
+--- PASS: TestCircuitBreakerFullCycle (0.15s)
+=== RUN   TestManagerConcurrentAccess
+--- PASS: TestManagerConcurrentAccess (0.00s)
+=== RUN   TestManagerMaxDevicesLimit
+--- PASS: TestManagerMaxDevicesLimit (0.02s)
+=== RUN   TestManagerPruneConcurrent
+--- PASS: TestManagerPruneConcurrent (0.00s)
+=== RUN   TestDoubleDecrementBug
+    manager_double_decrement_test.go:42: Initial suspended count: 2
+    manager_double_decrement_test.go:53: Count after cleanup via GetSuspendedCount(): 2
+    manager_double_decrement_test.go:55: Expected 0 after cleanup, got 2
+    manager_double_decrement_test.go:64: Count after ReportPingSuccess(): 1
+    manager_double_decrement_test.go:71: Expected count to remain 0, got 1
+    manager_double_decrement_test.go:76: Accurate count: 0
+--- FAIL: TestDoubleDecrementBug (0.15s)
+=== RUN   TestDoubleDecrementMultipleDevices
+    manager_double_decrement_test.go:108: Initial count: 5
+    manager_double_decrement_test.go:118: Count after expiry cleanup: 5
+    manager_double_decrement_test.go:128: Final count: 0
+--- PASS: TestDoubleDecrementMultipleDevices (0.15s)
+=== RUN   TestExpiredSuspensionStuckCounter
+    manager_expired_suspension_test.go:51: Cached count: 1, Accurate count: 0
+    manager_expired_suspension_test.go:57: BUG REPRODUCED: Cached count (1) != Accurate count (0)
+    manager_expired_suspension_test.go:58: The suspended_devices counter is stuck at 1 even though suspension expired
+--- FAIL: TestExpiredSuspensionStuckCounter (0.15s)
+=== RUN   TestPruneStale_ExpiredSuspension
+    manager_prune_suspension_test.go:35: Count after suspension: 1
+    manager_prune_suspension_test.go:55: Pruned 1 devices
+    manager_prune_suspension_test.go:69: Count after pruning: 0
+--- PASS: TestPruneStale_ExpiredSuspension (0.25s)
+=== RUN   TestPruneStale_ActiveSuspension
+    manager_prune_suspension_test.go:108: Count after suspension: 1
+    manager_prune_suspension_test.go:116: Pruned 1 devices
+    manager_prune_suspension_test.go:124: Count after pruning: 0
+--- PASS: TestPruneStale_ActiveSuspension (0.00s)
+=== RUN   TestPruneStale_NoSuspension
+--- PASS: TestPruneStale_NoSuspension (0.00s)
+=== RUN   TestRecoveryAfterExpiredSuspensionBug
+    manager_recovery_bug_test.go:46: Count after suspension expired: 1
+    manager_recovery_bug_test.go:53: Count after recovery: 0
+--- PASS: TestRecoveryAfterExpiredSuspensionBug (0.15s)
+=== RUN   TestPruneRemovesSuspendedDeviceBug
+    manager_recovery_bug_test.go:92: Count before pruning: 1
+    manager_recovery_bug_test.go:99: Pruned 1 devices
+    manager_recovery_bug_test.go:112: Count after pruning: 0
+--- PASS: TestPruneRemovesSuspendedDeviceBug (0.00s)
+=== RUN   TestSuspendedCountCaching
+--- PASS: TestSuspendedCountCaching (0.00s)
+=== RUN   TestSuspendedCountAccuracy
+--- PASS: TestSuspendedCountAccuracy (0.00s)
+=== RUN   TestSuspendedCountExpiration
+--- PASS: TestSuspendedCountExpiration (0.20s)
+=== RUN   TestSuspendedCountConcurrency
+--- PASS: TestSuspendedCountConcurrency (0.11s)
+=== RUN   TestGetSuspendedCount
+--- PASS: TestGetSuspendedCount (0.00s)
+=== RUN   TestGetSuspendedCountThreadSafe
+--- PASS: TestGetSuspendedCountThreadSafe (0.00s)
+=== RUN   TestGetSuspendedCountConsistencyWithIsSuspended
+--- PASS: TestGetSuspendedCountConsistencyWithIsSuspended (0.00s)
+=== RUN   TestManagerAddGetPrune
+--- PASS: TestManagerAddGetPrune (0.00s)
+FAIL
+FAIL	github.com/kljama/netscan/internal/state	1.783s
+FAIL
