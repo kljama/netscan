@@ -150,6 +150,7 @@ func (w *Writer) monitorWriteErrors() {
 			return
 		case err := <-w.primaryErrorChan:
 			if err != nil {
+				w.failedBatches.Add(1)
 				log.Error().
 					Err(err).
 					Str("bucket", "primary").
@@ -292,62 +293,29 @@ func (w *Writer) addToBatch(point *write.Point) {
 	}
 }
 
-// flushBatch writes a batch of points to InfluxDB with retry logic
+// flushBatch writes a batch of points to InfluxDB
 func (w *Writer) flushBatch(points []*write.Point) {
 	if len(points) == 0 {
 		return
 	}
 
-	// Write batch to InfluxDB with retry on failure
-	w.flushWithRetry(points, 3)
-}
+	// Write all points in the batch
+	for _, point := range points {
+		w.writeAPI.WritePoint(point)
+	}
 
-// flushWithRetry attempts to write points with exponential backoff retry
-func (w *Writer) flushWithRetry(points []*write.Point, maxRetries int) {
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		// Write all points in the batch
-		for _, point := range points {
-			w.writeAPI.WritePoint(point)
-		}
+	// Force a flush to ensure points are sent immediately
+	w.writeAPI.Flush()
 
-		// Force a flush to check for immediate errors
-		w.writeAPI.Flush()
+	// Increment successful batches counter
+	// Note: This only counts submission to the WriteAPI. Actual success/failure
+	// is reported asynchronously via the error channel.
+	w.successfulBatches.Add(1)
 
-		// Wait a short time to see if errors appear
-		time.Sleep(100 * time.Millisecond)
-
-		// Check error channel with timeout using stored channel reference
-		select {
-		case err := <-w.primaryErrorChan:
-			if err != nil {
-				if attempt < maxRetries {
-					backoffDuration := time.Duration(1<<uint(attempt)) * time.Second
-					log.Warn().
-						Err(err).
-						Int("attempt", attempt+1).
-						Int("max_retries", maxRetries).
-						Dur("backoff", backoffDuration).
-						Msg("InfluxDB write failed, retrying with backoff")
-					time.Sleep(backoffDuration)
-					continue
-				} else {
-					// Final failure - increment failed counter
-					w.failedBatches.Add(1)
-					log.Error().
-						Err(err).
-						Int("points", len(points)).
-						Msg("InfluxDB write failed after all retries")
-					return
-				}
-			}
-		default:
-			// No error, write successful - increment success counter
-			w.successfulBatches.Add(1)
-			log.Debug().
-				Int("points", len(points)).
-				Msg("Successfully flushed points to InfluxDB")
-			return
-		}
+	if log.Debug().Enabled() {
+		log.Debug().
+			Int("points", len(points)).
+			Msg("Submitted points to InfluxDB WriteAPI")
 	}
 }
 
