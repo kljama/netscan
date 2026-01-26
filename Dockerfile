@@ -15,9 +15,12 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Version build argument
+ARG VERSION=dev
+
 # Build the binary with optimizations for linux/amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X main.Version=${VERSION}" \
     -o netscan \
     ./cmd/netscan
 
