@@ -113,7 +113,7 @@ func (hs *HealthServer) GetHealthMetrics() HealthResponse {
 
 	return HealthResponse{
 		Status:             status,
-		Version:            "1.0.0", // TODO: Get from build-time variable
+		Version:            Version,
 		Uptime:             time.Since(hs.startTime).String(),
 		DeviceCount:        hs.stateMgr.Count(),
 		SuspendedDevices:   hs.stateMgr.GetSuspendedCount(),
