@@ -193,7 +193,7 @@ func RunSNMPScan(ips []string, snmpConfig *config.SNMPConfig, workers int) []sta
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmp.GetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(&snmp.GoSNMPWrapper{GoSNMP: params}, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				// SNMP query failed, skip this device
@@ -313,7 +313,7 @@ func RunScan(cfg *config.Config) []state.Device {
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmp.GetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(&snmp.GoSNMPWrapper{GoSNMP: params}, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				continue // Skip devices with incomplete SNMP responses
@@ -511,7 +511,7 @@ func RunFullDiscovery(cfg *config.Config) []state.Device {
 			}
 			// Query standard MIB-II system OIDs: sysName, sysDescr
 			oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-			resp, err := snmp.GetWithFallback(params, oids)
+			resp, err := snmp.GetWithFallback(&snmp.GoSNMPWrapper{GoSNMP: params}, oids)
 			params.Conn.Close()
 			if err != nil || len(resp.Variables) < 2 {
 				// SNMP query failed, but device is online

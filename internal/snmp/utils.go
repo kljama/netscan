@@ -8,10 +8,27 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// SNMPClient interface for SNMP operations to allow mocking
+type SNMPClient interface {
+	Get(oids []string) (*gosnmp.SnmpPacket, error)
+	GetNext(oids []string) (*gosnmp.SnmpPacket, error)
+	GetTarget() string
+}
+
+// GoSNMPWrapper wraps gosnmp.GoSNMP to implement SNMPClient
+type GoSNMPWrapper struct {
+	*gosnmp.GoSNMP
+}
+
+// GetTarget returns the target IP address
+func (w *GoSNMPWrapper) GetTarget() string {
+	return w.Target
+}
+
 // GetWithFallback attempts to get SNMP OIDs using Get, falling back to GetNext if Get fails
-func GetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, error) {
+func GetWithFallback(client SNMPClient, oids []string) (*gosnmp.SnmpPacket, error) {
 	// Try Get first (most efficient for .0 instances)
-	resp, err := params.Get(oids)
+	resp, err := client.Get(oids)
 	if err == nil {
 		// Check if we got valid responses (no NoSuchInstance errors)
 		hasValidData := false
@@ -26,7 +43,7 @@ func GetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, 
 		}
 		// All variables returned NoSuchInstance/NoSuchObject, try GetNext
 		log.Debug().
-			Str("target", params.Target).
+			Str("target", client.GetTarget()).
 			Msg("Get returned NoSuchInstance, trying GetNext fallback")
 	}
 
@@ -42,16 +59,20 @@ func GetWithFallback(params *gosnmp.GoSNMP, oids []string) (*gosnmp.SnmpPacket, 
 	}
 
 	variables := make([]gosnmp.SnmpPDU, 0, len(baseOIDs))
-	for _, baseOID := range baseOIDs {
-		resp, err := params.GetNext([]string{baseOID})
-		if err != nil {
-			continue
-		}
-		if len(resp.Variables) > 0 {
+	// Optimize: Use single GetNext for all OIDs
+	resp, err = client.GetNext(baseOIDs)
+	if err == nil && len(resp.Variables) > 0 {
+		for i, variable := range resp.Variables {
+			// Ensure we don't go out of bounds if response has more variables than requests
+			if i >= len(baseOIDs) {
+				break
+			}
+			baseOID := baseOIDs[i]
+
 			// Verify the returned OID is under the requested base OID
-			returnedOID := resp.Variables[0].Name
+			returnedOID := variable.Name
 			if len(returnedOID) >= len(baseOID) && returnedOID[:len(baseOID)] == baseOID {
-				variables = append(variables, resp.Variables[0])
+				variables = append(variables, variable)
 			}
 		}
 	}
