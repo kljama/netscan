@@ -42,8 +42,6 @@ type Config struct {
 	PingTimeout             time.Duration  `yaml:"ping_timeout"`
 	PingRateLimit           float64        `yaml:"ping_rate_limit"`            // Tokens per second (sustained ping rate)
 	PingBurstLimit          int            `yaml:"ping_burst_limit"`           // Token bucket capacity (max burst)
-	PingMaxConsecutiveFails int            `yaml:"ping_max_consecutive_fails"` // Circuit breaker: max consecutive failures before suspension
-	PingBackoffDuration     time.Duration  `yaml:"ping_backoff_duration"`      // Circuit breaker: suspension duration after max failures
 	SNMPInterval            time.Duration  `yaml:"snmp_interval"`              // Interval for continuous SNMP polling per device
 	SNMPRateLimit           float64        `yaml:"snmp_rate_limit"`            // Tokens per second (sustained SNMP query rate)
 	SNMPBurstLimit          int            `yaml:"snmp_burst_limit"`           // Token bucket capacity (max SNMP burst)
@@ -79,8 +77,6 @@ func LoadConfig(path string) (*Config, error) {
 		PingTimeout             string     `yaml:"ping_timeout"`
 		PingRateLimit           float64    `yaml:"ping_rate_limit"`
 		PingBurstLimit          int        `yaml:"ping_burst_limit"`
-		PingMaxConsecutiveFails int        `yaml:"ping_max_consecutive_fails"`
-		PingBackoffDuration     string     `yaml:"ping_backoff_duration"`
 		SNMPInterval            string     `yaml:"snmp_interval"`
 		SNMPRateLimit           float64    `yaml:"snmp_rate_limit"`
 		SNMPBurstLimit          int        `yaml:"snmp_burst_limit"`
@@ -160,15 +156,6 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 
-	// Parse PingBackoffDuration if specified
-	var pingBackoffDuration time.Duration
-	if raw.PingBackoffDuration != "" {
-		pingBackoffDuration, err = time.ParseDuration(raw.PingBackoffDuration)
-		if err != nil {
-			return nil, fmt.Errorf("invalid ping_backoff_duration: %v", err)
-		}
-	}
-
 	// Parse SNMPInterval if specified
 	var snmpInterval time.Duration
 	if raw.SNMPInterval != "" {
@@ -242,14 +229,6 @@ func LoadConfig(path string) (*Config, error) {
 		raw.PingBurstLimit = 256 // Default: allow bursts up to 256 pings
 	}
 
-	// Set circuit breaker defaults
-	if raw.PingMaxConsecutiveFails == 0 {
-		raw.PingMaxConsecutiveFails = 10 // Default: 10 consecutive failures before suspension
-	}
-	if pingBackoffDuration == 0 {
-		pingBackoffDuration = 5 * time.Minute // Default: 5 minute suspension
-	}
-
 	// Set SNMP continuous polling defaults
 	if snmpInterval == 0 {
 		snmpInterval = 1 * time.Hour // Default: poll SNMP every 1 hour per device
@@ -288,8 +267,6 @@ func LoadConfig(path string) (*Config, error) {
 		PingTimeout:             pingTimeout,
 		PingRateLimit:           raw.PingRateLimit,
 		PingBurstLimit:          raw.PingBurstLimit,
-		PingMaxConsecutiveFails: raw.PingMaxConsecutiveFails,
-		PingBackoffDuration:     pingBackoffDuration,
 		SNMPInterval:            snmpInterval,
 		SNMPRateLimit:           raw.SNMPRateLimit,
 		SNMPBurstLimit:          raw.SNMPBurstLimit,
@@ -419,14 +396,6 @@ func ValidateConfig(cfg *Config) (string, error) {
 	// Burst should be at least equal to rate to avoid immediate throttling
 	if float64(cfg.PingBurstLimit) < cfg.PingRateLimit {
 		return "WARNING: ping_burst_limit should be >= ping_rate_limit to avoid immediate throttling", nil
-	}
-
-	// Validate circuit breaker settings
-	if cfg.PingMaxConsecutiveFails <= 0 {
-		return "", fmt.Errorf("ping_max_consecutive_fails must be greater than 0, got %d", cfg.PingMaxConsecutiveFails)
-	}
-	if cfg.PingBackoffDuration < time.Minute {
-		return "", fmt.Errorf("ping_backoff_duration must be at least 1 minute, got %v", cfg.PingBackoffDuration)
 	}
 
 	// Validate SNMP continuous polling settings

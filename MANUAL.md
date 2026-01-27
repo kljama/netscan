@@ -984,23 +984,6 @@ export SNMP_COMMUNITY=private-community
 | `ping_rate_limit` | `float64` | `64.0` | No | Sustained ping rate in pings per second across all devices (token bucket rate). Controls global ping rate to prevent network flooding. |
 | `ping_burst_limit` | `int` | `256` | No | Maximum burst ping capacity (token bucket size). Allows short bursts above sustained rate. |
 
-#### Circuit Breaker Settings
-
-The circuit breaker automatically suspends devices that fail ping checks consecutively to prevent wasting resources.
-
-| Parameter | Type | Default | Required | Description |
-|-----------|------|---------|----------|-------------|
-| `ping_max_consecutive_fails` | `int` | `10` | No | Number of consecutive ping failures before device is suspended. Range: 1-100. |
-| `ping_backoff_duration` | `duration` | `"5m"` | No | How long to suspend device after reaching max failures. Device will be retried after this duration. |
-
-**Example circuit breaker behavior:**
-- Device fails ping 10 times consecutively
-- Device suspended for 5 minutes
-- During suspension, pings are skipped (saves resources)
-- After 5 minutes, device is retried
-- If successful, failure counter resets
-- If it fails again, cycle repeats
-
 #### Performance Tuning Settings
 
 | Parameter | Type | Default | Required | Description |
@@ -1095,10 +1078,6 @@ ping_timeout: "3s"
 ping_rate_limit: 100.0
 ping_burst_limit: 500
 
-# Circuit breaker for unreliable devices
-ping_max_consecutive_fails: 10
-ping_backoff_duration: "5m"
-
 icmp_workers: 64
 snmp_workers: 32  # Used for initial SNMP scan on discovery
 
@@ -1147,9 +1126,6 @@ ping_timeout: "4s"
 ping_rate_limit: 500.0  # Higher rate for many devices
 ping_burst_limit: 2000
 
-ping_max_consecutive_fails: 20  # More tolerant
-ping_backoff_duration: "10m"    # Longer backoff
-
 icmp_workers: 256  # Maximum recommended
 snmp_workers: 128  # Used for initial SNMP scan on discovery (50% of icmp_workers)
 
@@ -1193,22 +1169,18 @@ Stores ICMP ping results for continuous uptime monitoring.
 **Fields:**
 | Field | Type | Unit | Description | Example |
 |-------|------|------|-------------|---------|
-| `rtt_ms` | float64 | milliseconds | Round-trip time for successful pings. `0.0` for failed pings or suspended devices. | `12.5` |
-| `success` | bool | n/a | Ping success status. `true` if device responded, `false` if timeout or suspended. | `true` |
-| `suspended` | bool | n/a | Circuit breaker suspension status. `true` if device is suspended (circuit breaker tripped), `false` for normal operation. When `true`, ping was skipped to conserve resources. | `false` |
+| `rtt_ms` | float64 | milliseconds | Round-trip time for successful pings. `0.0` for failed pings. | `12.5` |
+| `success` | bool | n/a | Ping success status. `true` if device responded, `false` if timeout. | `true` |
 
 **Timestamp:** Time when ping was executed (not when response received)
 
 **Example Data Points:**
 ```
 # Normal successful ping
-ping,ip=192.168.1.100 rtt_ms=12.5,success=true,suspended=false 1698765432000000000
+ping,ip=192.168.1.100 rtt_ms=12.5,success=true 1698765432000000000
 
 # Failed ping (timeout)
-ping,ip=192.168.1.100 rtt_ms=0.0,success=false,suspended=false 1698765433000000000
-
-# Suspended device (circuit breaker tripped)
-ping,ip=192.168.1.100 rtt_ms=0.0,success=false,suspended=true 1698765434000000000
+ping,ip=192.168.1.100 rtt_ms=0.0,success=false 1698765433000000000
 ```
 
 **Sample Flux Query (Last 24h ping success rate by device):**
@@ -1219,18 +1191,6 @@ from(bucket: "netscan")
   |> filter(fn: (r) => r._field == "success")
   |> group(columns: ["ip"])
   |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
-```
-
-**Sample Flux Query (Find currently suspended devices):**
-```flux
-from(bucket: "netscan")
-  |> range(start: -5m)
-  |> filter(fn: (r) => r._measurement == "ping")
-  |> filter(fn: (r) => r._field == "suspended")
-  |> filter(fn: (r) => r._value == true)
-  |> group(columns: ["ip"])
-  |> last()
-  |> keep(columns: ["ip", "_time"])
 ```
 
 ### Measurement: `device_info`
@@ -1287,7 +1247,7 @@ Stores application health and observability metrics.
 |-------|------|------|-------------|
 | `device_count` | int | count | Total number of devices currently managed by StateManager |
 | `active_pingers` | int | count | Number of pinger goroutines currently running (one per monitored device) |
-| `suspended_devices` | int | count | Number of devices currently suspended by circuit breaker |
+| `snmp_suspended_devices` | int | count | Number of devices currently suspended by SNMP circuit breaker |
 | `goroutines` | int | count | Total Go goroutines in the application (for debugging goroutine leaks) |
 | `memory_mb` | int | MB | Go heap memory usage (runtime.MemStats.Alloc) |
 | `rss_mb` | int | MB | OS-level resident set size (from `/proc/self/status` VmRSS on Linux) |
@@ -1300,7 +1260,7 @@ Stores application health and observability metrics.
 
 **Example Data Point:**
 ```
-health_metrics device_count=150i,active_pingers=150i,suspended_devices=5i,goroutines=325i,memory_mb=245i,rss_mb=512i,influxdb_ok=true,influxdb_successful_batches=1234u,influxdb_failed_batches=0u,pings_sent_total=456789u 1698765432000000000
+health_metrics device_count=150i,active_pingers=150i,snmp_suspended_devices=5i,goroutines=325i,memory_mb=245i,rss_mb=512i,influxdb_ok=true,influxdb_successful_batches=1234u,influxdb_failed_batches=0u,pings_sent_total=456789u 1698765432000000000
 ```
 
 **Sample Flux Query (Monitor application health over time):**
@@ -1409,7 +1369,7 @@ netscan exposes HTTP health check endpoints for monitoring, container orchestrat
   "version": "1.0.0",
   "uptime": "2h15m30s",
   "device_count": 150,
-  "suspended_devices": 5,
+  "snmp_suspended_devices": 5,
   "active_pingers": 145,
   "influxdb_ok": true,
   "influxdb_successful": 12345,
@@ -1430,8 +1390,8 @@ netscan exposes HTTP health check endpoints for monitoring, container orchestrat
 | `version` | string | Application version string (currently hardcoded `"1.0.0"`, TODO: inject at build time) |
 | `uptime` | string | Human-readable time since service started (e.g., `"2h15m30s"`) |
 | `device_count` | int | Total number of devices currently managed by StateManager |
-| `suspended_devices` | int | Number of devices currently suspended by circuit breaker (failing ping checks) |
-| `active_pingers` | int | Number of pinger goroutines currently running (one per monitored device, excluding suspended devices) |
+| `snmp_suspended_devices` | int | Number of devices currently suspended by SNMP circuit breaker |
+| `active_pingers` | int | Number of pinger goroutines currently running (one per monitored device) |
 | `influxdb_ok` | bool | InfluxDB connectivity status. `true` if InfluxDB health check passes, `false` if unreachable. |
 | `influxdb_successful` | uint64 | Cumulative count of successful batch writes to InfluxDB since service startup |
 | `influxdb_failed` | uint64 | Cumulative count of failed batch writes to InfluxDB since service startup |
@@ -1551,10 +1511,10 @@ if [ "$(curl -s http://localhost:8080/health | jq -r '.influxdb_ok')" != "true" 
   echo "ALERT: InfluxDB unreachable"
 fi
 
-# Example alert: High suspended device count
-suspended=$(curl -s http://localhost:8080/health | jq -r '.suspended_devices')
+# Example alert: High SNMP suspended device count
+suspended=$(curl -s http://localhost:8080/health | jq -r '.snmp_suspended_devices')
 if [ $suspended -gt 10 ]; then
-  echo "WARNING: $suspended devices suspended by circuit breaker"
+  echo "WARNING: $suspended devices suspended by SNMP circuit breaker"
 fi
 ```
 

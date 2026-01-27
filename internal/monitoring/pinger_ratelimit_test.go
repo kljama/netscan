@@ -34,7 +34,7 @@ func TestRateLimiterIntegration(t *testing.T) {
 	// Start all pingers - they will try to ping immediately
 	// But the rate limiter should throttle them to 2 pings/sec
 	for _, dev := range devices {
-		go StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+		go StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 	}
 
 	// Wait a bit for them to start
@@ -73,7 +73,7 @@ func TestInFlightCounterAccuracy(t *testing.T) {
 	defer cancel()
 
 	// Start a single pinger
-	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 
 	// Wait for at least one ping to start
 	time.Sleep(100 * time.Millisecond)
@@ -115,7 +115,7 @@ func TestRateLimiterContextCancellation(t *testing.T) {
 	// But context will cancel after 100ms
 	done := make(chan bool, 1)
 	go func() {
-		StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+		StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 		done <- true
 	}()
 

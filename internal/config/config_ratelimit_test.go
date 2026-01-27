@@ -173,8 +173,6 @@ func TestValidateConfigRateLimits(t *testing.T) {
 				PingTimeout:             3 * time.Second,
 				PingRateLimit:           tt.rateLimit,
 				PingBurstLimit:          tt.burstLimit,
-				PingMaxConsecutiveFails: 10,              // Circuit breaker default
-				PingBackoffDuration:     5 * time.Minute, // Circuit breaker default
 				SNMPInterval:            1 * time.Hour,
 				SNMPRateLimit:           10.0,
 				SNMPBurstLimit:          50,

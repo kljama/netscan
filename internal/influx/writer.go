@@ -212,11 +212,11 @@ func (w *Writer) WriteDeviceInfo(ip, hostname, sysDescr string) error {
 
 // WriteHealthMetrics writes application health metrics to InfluxDB health bucket
 // Updated to include dropped points metric
-func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB, rssMB, suspendedCount int, influxOK bool, influxSuccess, influxFailed, droppedPoints, pingsSentTotal uint64) {
+func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB, rssMB, snmpSuspendedCount int, influxOK bool, influxSuccess, influxFailed, droppedPoints, pingsSentTotal uint64) {
 	log.Debug().
 		Int("device_count", deviceCount).
 		Int("active_pingers", pingerCount).
-		Int("suspended_devices", suspendedCount).
+		Int("snmp_suspended_devices", snmpSuspendedCount).
 		Int("goroutines", goroutines).
 		Int("memory_mb", memMB).
 		Int("rss_mb", rssMB).
@@ -231,7 +231,7 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 		map[string]interface{}{
 			"device_count":                deviceCount,
 			"active_pingers":              pingerCount,
-			"suspended_devices":           suspendedCount,
+			"snmp_suspended_devices":      snmpSuspendedCount,
 			"goroutines":                  goroutines,
 			"memory_mb":                   memMB,
 			"rss_mb":                      rssMB,
@@ -249,8 +249,7 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 }
 
 // WritePingResult writes ICMP ping metrics to InfluxDB (optimized for time-series)
-// The suspended parameter indicates whether the device is currently suspended by the circuit breaker
-func (w *Writer) WritePingResult(ip string, rtt time.Duration, successful bool, suspended bool) error {
+func (w *Writer) WritePingResult(ip string, rtt time.Duration, successful bool) error {
 	// Validate IP address
 	if err := validateIPAddress(ip); err != nil {
 		return fmt.Errorf("invalid IP address for ping result: %v", err)
@@ -268,9 +267,8 @@ func (w *Writer) WritePingResult(ip string, rtt time.Duration, successful bool, 
 		"ping",
 		map[string]string{"ip": ip},
 		map[string]interface{}{
-			"rtt_ms":    float64(rtt.Nanoseconds()) / 1e6,
-			"success":   successful,
-			"suspended": suspended,
+			"rtt_ms":  float64(rtt.Nanoseconds()) / 1e6,
+			"success": successful,
 		},
 		time.Now(),
 	)
