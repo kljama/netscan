@@ -84,12 +84,12 @@ influxdb:
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	
+
 	// Test health_bucket default
 	if cfg.InfluxDB.HealthBucket != "health" {
 		t.Errorf("expected health_bucket default to be 'health', got %s", cfg.InfluxDB.HealthBucket)
 	}
-	
+
 	// Test health_report_interval default
 	if cfg.HealthReportInterval != 10*time.Second {
 		t.Errorf("expected health_report_interval default to be 10s, got %v", cfg.HealthReportInterval)
@@ -123,53 +123,53 @@ influxdb:
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	
+
 	// Test new performance defaults
 	if cfg.IcmpWorkers != 64 {
 		t.Errorf("expected IcmpWorkers default to be 64, got %d", cfg.IcmpWorkers)
 	}
-	
+
 	if cfg.SnmpWorkers != 32 {
 		t.Errorf("expected SnmpWorkers default to be 32, got %d", cfg.SnmpWorkers)
 	}
-	
+
 	if cfg.MaxConcurrentPingers != 20000 {
 		t.Errorf("expected MaxConcurrentPingers default to be 20000, got %d", cfg.MaxConcurrentPingers)
 	}
-	
+
 	if cfg.MaxDevices != 20000 {
 		t.Errorf("expected MaxDevices default to be 20000, got %d", cfg.MaxDevices)
 	}
-	
+
 	if cfg.MemoryLimitMB != 16384 {
 		t.Errorf("expected MemoryLimitMB default to be 16384, got %d", cfg.MemoryLimitMB)
 	}
-	
+
 	if cfg.InfluxDB.BatchSize != 5000 {
 		t.Errorf("expected InfluxDB.BatchSize default to be 5000, got %d", cfg.InfluxDB.BatchSize)
 	}
-	
+
 	// Test new SNMP continuous polling defaults
 	if cfg.SNMPInterval != 1*time.Hour {
 		t.Errorf("expected SNMPInterval default to be 1h, got %v", cfg.SNMPInterval)
 	}
-	
+
 	if cfg.SNMPRateLimit != 10.0 {
 		t.Errorf("expected SNMPRateLimit default to be 10.0, got %.2f", cfg.SNMPRateLimit)
 	}
-	
+
 	if cfg.SNMPBurstLimit != 50 {
 		t.Errorf("expected SNMPBurstLimit default to be 50, got %d", cfg.SNMPBurstLimit)
 	}
-	
+
 	if cfg.SNMPMaxConsecutiveFails != 5 {
 		t.Errorf("expected SNMPMaxConsecutiveFails default to be 5, got %d", cfg.SNMPMaxConsecutiveFails)
 	}
-	
+
 	if cfg.SNMPBackoffDuration != 1*time.Hour {
 		t.Errorf("expected SNMPBackoffDuration default to be 1h, got %v", cfg.SNMPBackoffDuration)
 	}
-	
+
 	if cfg.MaxConcurrentSNMPPollers != 20000 {
 		t.Errorf("expected MaxConcurrentSNMPPollers default to be 20000, got %d", cfg.MaxConcurrentSNMPPollers)
 	}
@@ -181,7 +181,7 @@ func TestLoadConfigEnvVarExpansion(t *testing.T) {
 	testToken := "test-token-12345"
 	testOrg := "test-organization"
 	testCommunity := "secret-community"
-	
+
 	os.Setenv("TEST_INFLUXDB_TOKEN", testToken)
 	os.Setenv("TEST_INFLUXDB_ORG", testOrg)
 	os.Setenv("TEST_SNMP_COMMUNITY", testCommunity)
@@ -196,7 +196,7 @@ func TestLoadConfigEnvVarExpansion(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	
+
 	// Config with environment variable references using ${VAR} syntax
 	configYAML := `icmp_discovery_interval: "5m"
 networks:
@@ -215,21 +215,21 @@ influxdb:
 	if _, err := f.WriteString(configYAML); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	cfg, err := LoadConfig(f.Name())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	
+
 	// Verify environment variables were expanded
 	if cfg.InfluxDB.Token != testToken {
 		t.Errorf("expected token to be expanded to %q, got %q", testToken, cfg.InfluxDB.Token)
 	}
-	
+
 	if cfg.InfluxDB.Org != testOrg {
 		t.Errorf("expected org to be expanded to %q, got %q", testOrg, cfg.InfluxDB.Org)
 	}
-	
+
 	if cfg.SNMP.Community != testCommunity {
 		t.Errorf("expected community to be expanded to %q, got %q", testCommunity, cfg.SNMP.Community)
 	}
@@ -246,7 +246,7 @@ func TestLoadConfigEnvVarExpansionWithDollarVar(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	
+
 	// Config using $VAR syntax (without braces)
 	configYAML := `icmp_discovery_interval: "5m"
 networks:
@@ -264,12 +264,12 @@ influxdb:
 	if _, err := f.WriteString(configYAML); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	cfg, err := LoadConfig(f.Name())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	
+
 	// Verify $VAR syntax works
 	if cfg.InfluxDB.Bucket != testBucket {
 		t.Errorf("expected bucket to be expanded to %q, got %q", testBucket, cfg.InfluxDB.Bucket)
@@ -286,7 +286,7 @@ func TestLoadConfigEnvVarNotSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.Remove(f.Name())
-	
+
 	// Config referencing a non-existent environment variable
 	configYAML := `icmp_discovery_interval: "5m"
 networks:
@@ -304,21 +304,20 @@ influxdb:
 	if _, err := f.WriteString(configYAML); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	cfg, err := LoadConfig(f.Name())
 	if err != nil {
 		t.Fatalf("expected no error during load, got %v", err)
 	}
-	
+
 	// When environment variable is not set, os.ExpandEnv returns empty string
 	if cfg.SNMP.Community != "" {
 		t.Errorf("expected empty string for unset var, got %q", cfg.SNMP.Community)
 	}
-	
+
 	// This should fail validation since community is required
 	_, err = ValidateConfig(cfg)
 	if err == nil {
 		t.Error("expected validation error for empty community string")
 	}
 }
-

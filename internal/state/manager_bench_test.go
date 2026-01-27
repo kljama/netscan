@@ -76,7 +76,7 @@ func BenchmarkAddDeviceWithEviction(b *testing.B) {
 // BenchmarkGet tests the performance of retrieving devices
 func BenchmarkGet(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
 	}{
 		{"Get_100devices", 100},
@@ -110,7 +110,7 @@ func BenchmarkGet(b *testing.B) {
 // BenchmarkGetAllIPs tests the performance of retrieving all IPs
 func BenchmarkGetAllIPs(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
 	}{
 		{"GetAllIPs_100devices", 100},
@@ -141,7 +141,7 @@ func BenchmarkGetAllIPs(b *testing.B) {
 // BenchmarkUpdateLastSeen tests the performance of updating timestamps
 func BenchmarkUpdateLastSeen(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
 	}{
 		{"UpdateLastSeen_100devices", 100},
@@ -242,7 +242,7 @@ func BenchmarkIsSuspended(b *testing.B) {
 // BenchmarkGetSuspendedCount tests counting suspended devices
 func BenchmarkGetSuspendedCount(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
 		suspended   int
 	}{
@@ -282,7 +282,7 @@ func BenchmarkGetSuspendedCount(b *testing.B) {
 // BenchmarkPruneStale tests pruning performance
 func BenchmarkPruneStale(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
 		staleCount  int
 	}{
@@ -323,9 +323,9 @@ func BenchmarkPruneStale(b *testing.B) {
 // BenchmarkConcurrentReads tests concurrent read performance
 func BenchmarkConcurrentReads(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
-		goroutines int
+		goroutines  int
 	}{
 		{"ConcurrentReads_1K_10goroutines", 1000, 10},
 		{"ConcurrentReads_10K_100goroutines", 10000, 100},
@@ -368,9 +368,9 @@ func BenchmarkConcurrentReads(b *testing.B) {
 // BenchmarkConcurrentWrites tests concurrent write performance
 func BenchmarkConcurrentWrites(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
-		goroutines int
+		goroutines  int
 	}{
 		{"ConcurrentWrites_1K_10goroutines", 1000, 10},
 		{"ConcurrentWrites_10K_100goroutines", 10000, 100},
@@ -413,9 +413,9 @@ func BenchmarkConcurrentWrites(b *testing.B) {
 // BenchmarkConcurrentMixed tests mixed read/write performance
 func BenchmarkConcurrentMixed(b *testing.B) {
 	benchmarks := []struct {
-		name       string
+		name        string
 		deviceCount int
-		goroutines int
+		goroutines  int
 	}{
 		{"ConcurrentMixed_1K_10goroutines", 1000, 10},
 		{"ConcurrentMixed_10K_100goroutines", 10000, 100},

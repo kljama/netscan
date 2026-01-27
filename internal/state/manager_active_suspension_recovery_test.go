@@ -30,7 +30,7 @@ func TestRecoveryDuringActiveSuspension(t *testing.T) {
 	if !mgr.IsSuspended("192.168.1.10") {
 		t.Fatal("Device should be suspended")
 	}
-	
+
 	countBeforeRecovery := mgr.GetSuspendedCount()
 	t.Logf("Count before recovery: %d", countBeforeRecovery)
 	if countBeforeRecovery != 1 {

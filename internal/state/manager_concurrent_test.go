@@ -10,7 +10,7 @@ import (
 func TestManagerConcurrentAccess(t *testing.T) {
 	mgr := NewManager(1000)
 	var wg sync.WaitGroup
-	
+
 	// Simulate concurrent adds from multiple goroutines
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -27,7 +27,7 @@ func TestManagerConcurrentAccess(t *testing.T) {
 			}
 		}(i)
 	}
-	
+
 	// Simulate concurrent reads
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
@@ -39,7 +39,7 @@ func TestManagerConcurrentAccess(t *testing.T) {
 			}
 		}()
 	}
-	
+
 	// Simulate concurrent updates
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
@@ -50,9 +50,9 @@ func TestManagerConcurrentAccess(t *testing.T) {
 			}
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify no data corruption occurred
 	all := mgr.GetAll()
 	if len(all) == 0 {
@@ -64,7 +64,7 @@ func TestManagerConcurrentAccess(t *testing.T) {
 func TestManagerMaxDevicesLimit(t *testing.T) {
 	maxDevices := 10
 	mgr := NewManager(maxDevices)
-	
+
 	// Add more devices than the limit
 	for i := 0; i < 20; i++ {
 		dev := Device{
@@ -74,17 +74,17 @@ func TestManagerMaxDevicesLimit(t *testing.T) {
 			LastSeen: time.Now().Add(time.Duration(i) * time.Second),
 		}
 		mgr.Add(dev)
-		
+
 		// Sleep briefly to ensure LastSeen timestamps are different
 		time.Sleep(1 * time.Millisecond)
 	}
-	
+
 	// Verify device count doesn't exceed limit
 	all := mgr.GetAll()
 	if len(all) > maxDevices {
 		t.Errorf("Device count %d exceeds limit %d", len(all), maxDevices)
 	}
-	
+
 	if len(all) != maxDevices {
 		t.Errorf("Expected exactly %d devices, got %d", maxDevices, len(all))
 	}
@@ -94,7 +94,7 @@ func TestManagerMaxDevicesLimit(t *testing.T) {
 func TestManagerPruneConcurrent(t *testing.T) {
 	mgr := NewManager(100)
 	var wg sync.WaitGroup
-	
+
 	// Add some old devices
 	for i := 0; i < 10; i++ {
 		dev := Device{
@@ -105,7 +105,7 @@ func TestManagerPruneConcurrent(t *testing.T) {
 		}
 		mgr.Add(dev)
 	}
-	
+
 	// Concurrent prune operations
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
@@ -114,7 +114,7 @@ func TestManagerPruneConcurrent(t *testing.T) {
 			mgr.Prune(30 * time.Minute)
 		}()
 	}
-	
+
 	// Concurrent read operations during pruning
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
@@ -123,9 +123,9 @@ func TestManagerPruneConcurrent(t *testing.T) {
 			mgr.GetAll()
 		}()
 	}
-	
+
 	wg.Wait()
-	
+
 	// Verify old devices were pruned
 	all := mgr.GetAll()
 	if len(all) > 0 {

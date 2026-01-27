@@ -29,7 +29,7 @@ func TestPruneStale_ExpiredSuspension(t *testing.T) {
 	if !mgr.IsSuspended("192.168.1.100") {
 		t.Fatal("Device should be suspended")
 	}
-	
+
 	// Get the count - this will clean up nothing because suspension is still active
 	count1 := mgr.GetSuspendedCount()
 	t.Logf("Count after suspension: %d", count1)
@@ -47,13 +47,13 @@ func TestPruneStale_ExpiredSuspension(t *testing.T) {
 
 	// BUT the counter might still be 1 if cleanup hasn't run
 	// Let's NOT call GetSuspendedCount() to avoid triggering cleanup
-	
+
 	// Now prune stale devices (> 24 hours old)
 	// This device was last seen 25 hours ago, so it will be pruned
 	// It has an EXPIRED suspension (SuspendedUntil is set but in the past)
 	pruned := mgr.PruneStale(24 * time.Hour)
 	t.Logf("Pruned %d devices", len(pruned))
-	
+
 	if len(pruned) != 1 {
 		t.Fatalf("Expected to prune 1 device, got %d", len(pruned))
 	}
@@ -67,7 +67,7 @@ func TestPruneStale_ExpiredSuspension(t *testing.T) {
 	// it for the device with expired suspension
 	countAfterPrune := mgr.GetSuspendedCount()
 	t.Logf("Count after pruning: %d", countAfterPrune)
-	
+
 	if countAfterPrune != 0 {
 		t.Errorf("BUG: Counter should be 0 after pruning device with expired suspension, got %d", countAfterPrune)
 	}
@@ -103,7 +103,7 @@ func TestPruneStale_ActiveSuspension(t *testing.T) {
 	if !mgr.IsSuspended("192.168.1.200") {
 		t.Fatal("Device should be actively suspended")
 	}
-	
+
 	count1 := mgr.GetSuspendedCount()
 	t.Logf("Count after suspension: %d", count1)
 	if count1 != 1 {
@@ -114,7 +114,7 @@ func TestPruneStale_ActiveSuspension(t *testing.T) {
 	// This device is old AND actively suspended
 	pruned := mgr.PruneStale(24 * time.Hour)
 	t.Logf("Pruned %d devices", len(pruned))
-	
+
 	if len(pruned) != 1 {
 		t.Fatalf("Expected to prune 1 device, got %d", len(pruned))
 	}
@@ -122,7 +122,7 @@ func TestPruneStale_ActiveSuspension(t *testing.T) {
 	// Counter should be 0 after pruning
 	countAfterPrune := mgr.GetSuspendedCount()
 	t.Logf("Count after pruning: %d", countAfterPrune)
-	
+
 	if countAfterPrune != 0 {
 		t.Errorf("Counter should be 0 after pruning actively suspended device, got %d", countAfterPrune)
 	}

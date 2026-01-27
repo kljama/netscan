@@ -45,7 +45,7 @@ func TestTimeoutParameterPropagation(t *testing.T) {
 			// This test validates that the function signature accepts the timeout parameter
 			// and that the parameter type is correct. Actual timeout behavior requires
 			// integration testing with real ICMP pings (requires root).
-			
+
 			dev := state.Device{IP: "127.0.0.1", Hostname: "localhost"}
 			writer := &mockWriter{}
 			stateMgr := &mockStateManager{}
@@ -53,14 +53,14 @@ func TestTimeoutParameterPropagation(t *testing.T) {
 			defer cancel()
 			limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 			var counter atomic.Int64
-			
+
 			// This should compile and accept timeout parameter without error
 			// The goroutine will exit almost immediately due to context timeout
-			StartPinger(ctx, nil, dev, tt.interval, tt.timeout, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute)
-			
+			StartPinger(ctx, nil, dev, tt.interval, tt.timeout, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+
 			// Wait for context to expire
 			<-ctx.Done()
-			
+
 			// If we got here without compile errors, the API contract is satisfied
 			// The timeout parameter is accepted and has the correct type
 		})
@@ -73,7 +73,7 @@ func TestTimeoutNotHardcoded(t *testing.T) {
 	// This test documents that timeout MUST be configurable, not hardcoded.
 	// The old code had: pinger.Timeout = 2 * time.Second (WRONG)
 	// The new code has: pinger.Timeout = timeout (CORRECT)
-	
+
 	// Test that different timeout values can be passed
 	timeouts := []time.Duration{
 		1 * time.Second,
@@ -82,7 +82,7 @@ func TestTimeoutNotHardcoded(t *testing.T) {
 		5 * time.Second,
 		10 * time.Second,
 	}
-	
+
 	for _, timeout := range timeouts {
 		dev := state.Device{IP: "127.0.0.1", Hostname: "localhost"}
 		writer := &mockWriter{}
@@ -90,14 +90,14 @@ func TestTimeoutNotHardcoded(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 		var counter atomic.Int64
-		
+
 		// Should accept any reasonable timeout value
-		StartPinger(ctx, nil, dev, 100*time.Millisecond, timeout, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute)
-		
+		StartPinger(ctx, nil, dev, 100*time.Millisecond, timeout, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+
 		<-ctx.Done()
 		cancel()
 	}
-	
+
 	// If we got here, all timeout values were accepted (not hardcoded)
 	t.Log("Confirmed: timeout parameter is configurable, not hardcoded")
 }

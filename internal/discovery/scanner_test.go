@@ -32,13 +32,13 @@ func TestIpsFromCIDR(t *testing.T) {
 // are excluded from the returned slice for various CIDR ranges
 func TestIpsFromCIDRExcludesNetworkAndBroadcast(t *testing.T) {
 	tests := []struct {
-		name            string
-		cidr            string
-		expectedCount   int
-		firstIP         string // First usable IP (not network address)
-		lastIP          string // Last usable IP (not broadcast address)
-		shouldInclude   []string // IPs that should be in the result
-		shouldExclude   []string // IPs that should NOT be in the result
+		name          string
+		cidr          string
+		expectedCount int
+		firstIP       string   // First usable IP (not network address)
+		lastIP        string   // Last usable IP (not broadcast address)
+		shouldInclude []string // IPs that should be in the result
+		shouldExclude []string // IPs that should NOT be in the result
 	}{
 		{
 			name:          "/24 network",
@@ -90,39 +90,39 @@ func TestIpsFromCIDRExcludesNetworkAndBroadcast(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ips := ipsFromCIDR(tt.cidr)
-			
+
 			// Check count
 			if len(ips) != tt.expectedCount {
 				t.Errorf("expected %d IPs, got %d", tt.expectedCount, len(ips))
 			}
-			
+
 			if len(ips) == 0 {
 				return
 			}
-			
+
 			// Check first IP
 			if ips[0] != tt.firstIP {
 				t.Errorf("expected first IP to be %s, got %s", tt.firstIP, ips[0])
 			}
-			
+
 			// Check last IP
 			if ips[len(ips)-1] != tt.lastIP {
 				t.Errorf("expected last IP to be %s, got %s", tt.lastIP, ips[len(ips)-1])
 			}
-			
+
 			// Build a map for efficient lookup
 			ipMap := make(map[string]bool)
 			for _, ip := range ips {
 				ipMap[ip] = true
 			}
-			
+
 			// Verify IPs that should be included
 			for _, ip := range tt.shouldInclude {
 				if !ipMap[ip] {
 					t.Errorf("expected IP %s to be included, but it was not", ip)
 				}
 			}
-			
+
 			// Verify IPs that should be excluded
 			for _, ip := range tt.shouldExclude {
 				if ipMap[ip] {
@@ -147,23 +147,23 @@ func TestRunICMPSweepWithRateLimiter(t *testing.T) {
 		testRateLimit  = 2.0 // 2 pings per second for testing
 		testBurstLimit = 2   // burst of 2
 	)
-	
+
 	// Create a very restrictive rate limiter: 2 pings per second, burst of 2
 	limiter := rate.NewLimiter(rate.Limit(testRateLimit), testBurstLimit)
-	
+
 	// Use a small network to test with
 	// /30 network has 4 total IPs (.0, .1, .2, .3)
 	// After excluding network (.0) and broadcast (.3), we have 2 usable IPs (.1, .2)
 	networks := []string{"127.0.0.0/30"}
 	workers := 4 // More workers than rate limit to test throttling
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	start := time.Now()
 	_ = RunICMPSweep(ctx, networks, workers, limiter)
 	elapsed := time.Since(start)
-	
+
 	// With 2 usable IPs and a rate of 2 pings/sec (burst of 2):
 	// - Both pings happen immediately (within burst)
 	// So we expect very fast completion (< 500ms)
@@ -179,24 +179,24 @@ func TestRunICMPSweepContextCancellation(t *testing.T) {
 		verySlowRateLimit = 0.1 // 1 ping every 10 seconds for testing cancellation
 		testBurstLimit    = 1
 	)
-	
+
 	// Create a very slow rate limiter to test cancellation
 	limiter := rate.NewLimiter(rate.Limit(verySlowRateLimit), testBurstLimit)
-	
+
 	// Use a network with several usable IPs
 	// /29 network has 8 total IPs (.0 through .7)
 	// After excluding network (.0) and broadcast (.7), we have 6 usable IPs (.1 through .6)
 	networks := []string{"127.0.0.0/29"}
 	workers := 2
-	
+
 	// Cancel context after 100ms
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	start := time.Now()
 	_ = RunICMPSweep(ctx, networks, workers, limiter)
 	elapsed := time.Since(start)
-	
+
 	// Should exit within ~1s (100ms timeout + buffer for cleanup)
 	// Increased from 500ms to 1s for CI environment tolerance
 	// Not 10+ seconds waiting for rate limiter
@@ -210,10 +210,10 @@ func TestRunICMPSweepWithoutRateLimiter(t *testing.T) {
 	// /30 network has 2 usable IPs after excluding network and broadcast
 	networks := []string{"127.0.0.0/30"}
 	workers := 2
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	// Should work fine with nil limiter (no rate limiting)
 	_ = RunICMPSweep(ctx, networks, workers, nil)
 	// No assertions needed - just verify it doesn't panic
@@ -227,11 +227,11 @@ func TestRunICMPSweepRandomization(t *testing.T) {
 	// /28 network has 16 total IPs (.0 through .15)
 	// After excluding network (.0) and broadcast (.15), we have 14 usable IPs (.1 through .14)
 	sequential := RunScanIPsOnly("192.168.1.0/28")
-	
+
 	if len(sequential) != 14 {
 		t.Fatalf("Expected 14 usable IPs in sequential order, got %d", len(sequential))
 	}
-	
+
 	// Verify sequential order is actually sequential (starting from .1, ending at .14)
 	for i := 0; i < len(sequential); i++ {
 		expected := fmt.Sprintf("192.168.1.%d", i+1) // +1 because we skip network address .0
@@ -239,12 +239,12 @@ func TestRunICMPSweepRandomization(t *testing.T) {
 			t.Errorf("Sequential order broken at index %d: expected %s, got %s", i, expected, sequential[i])
 		}
 	}
-	
+
 	// Now test that RunICMPSweep produces a different order due to shuffling
 	// We'll check that at least one IP is in a different position
 	// Note: There's a very small chance (1/14!) that shuffle produces same order,
 	// but that's astronomically unlikely (~1 in 87 billion)
-	
+
 	// We can't actually ping in test environment (no raw socket permissions),
 	// but we can verify the randomization logic by checking the order of IPs
 	// sent to the jobs channel. We'll use a separate helper to test this.
@@ -258,15 +258,15 @@ func TestIPShufflingBehavior(t *testing.T) {
 	if len(sequential) != 14 {
 		t.Fatalf("Expected 14 usable IPs, got %d", len(sequential))
 	}
-	
+
 	// Create a copy and shuffle it using the same logic as RunICMPSweep
 	shuffled := make([]string, len(sequential))
 	copy(shuffled, sequential)
-	
+
 	rand.Shuffle(len(shuffled), func(i, j int) {
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 	})
-	
+
 	// Verify that at least some elements are in different positions
 	// (checking all would fail if shuffle happened to keep some in place)
 	differentCount := 0
@@ -275,7 +275,7 @@ func TestIPShufflingBehavior(t *testing.T) {
 			differentCount++
 		}
 	}
-	
+
 	// With 14 elements, we expect most (if not all) to be in different positions
 	// Requiring at least 50% to be different is a reasonable statistical test
 	if differentCount < len(sequential)/2 {
