@@ -85,27 +85,27 @@ func (m *mockStateManagerForSuspension) IsSuspended(ip string) bool {
 func TestSuspendedStatusWritten(t *testing.T) {
 	writer := &mockWriterForSuspension{}
 	stateMgr := &mockStateManagerForSuspension{suspended: true} // Device is suspended
-	
+
 	dev := state.Device{IP: "192.168.1.100", Hostname: "test-device"}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var inFlightCounter atomic.Int64
 	var totalPingsSent atomic.Uint64
-	
+
 	// Start pinger - should write suspended status after initial 1 second delay
-	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute)
-	
+	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute, nil)
+
 	// Wait for the initial timer (1 second) plus some buffer
 	time.Sleep(1200 * time.Millisecond)
-	
+
 	// Verify that WritePingResult was called with suspended=true
 	writeCalls := writer.getWriteCalls()
 	if len(writeCalls) == 0 {
 		t.Fatalf("expected WritePingResult to be called, but it wasn't")
 	}
-	
+
 	// Check the first call
 	firstCall := writeCalls[0]
 	if !firstCall.suspended {
@@ -128,24 +128,24 @@ func TestSuspendedStatusWritten(t *testing.T) {
 func TestNormalPingNotSuspended(t *testing.T) {
 	writer := &mockWriterForSuspension{}
 	stateMgr := &mockStateManagerForSuspension{suspended: false} // Device is NOT suspended
-	
+
 	dev := state.Device{IP: "192.168.1.101", Hostname: "test-device"}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var inFlightCounter atomic.Int64
 	var totalPingsSent atomic.Uint64
-	
+
 	// Start pinger - should attempt normal ping
-	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute)
-	
+	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute, nil)
+
 	// Wait for the initial timer (1 second) plus some buffer
 	time.Sleep(1200 * time.Millisecond)
-	
+
 	// Get write calls safely
 	writeCalls := writer.getWriteCalls()
-	
+
 	// Check IF any calls were made (may be 0 if running without root privileges)
 	// If calls were made, they should all have suspended=false
 	for i, call := range writeCalls {
@@ -156,7 +156,7 @@ func TestNormalPingNotSuspended(t *testing.T) {
 			t.Errorf("call %d: expected ip=192.168.1.101, got ip=%v", i, call.ip)
 		}
 	}
-	
+
 	// Note: We don't require writes to have occurred because without root privileges,
 	// the ping execution will fail with "operation not permitted" and return early
 	// without writing any result. This is existing behavior.
@@ -171,29 +171,29 @@ func TestNormalPingNotSuspended(t *testing.T) {
 func TestSuspendedWriteFrequency(t *testing.T) {
 	writer := &mockWriterForSuspension{}
 	stateMgr := &mockStateManagerForSuspension{suspended: true}
-	
+
 	dev := state.Device{IP: "192.168.1.102", Hostname: "test-device"}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var inFlightCounter atomic.Int64
 	var totalPingsSent atomic.Uint64
-	
+
 	// Start pinger with 200ms interval
-	go StartPinger(ctx, nil, dev, 200*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute)
-	
+	go StartPinger(ctx, nil, dev, 200*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, 10, 5*time.Minute, nil)
+
 	// Wait for initial timer (1s) + a few intervals (1s + 400ms = 1.4s total, plus buffer)
 	time.Sleep(1500 * time.Millisecond)
-	
+
 	// Get write calls safely
 	writeCalls := writer.getWriteCalls()
-	
+
 	// Should have at least 2 writes (at ~1s and ~1.2s)
 	if len(writeCalls) < 2 {
 		t.Errorf("expected at least 2 writes, got %d", len(writeCalls))
 	}
-	
+
 	// All writes should have suspended=true
 	for i, call := range writeCalls {
 		if !call.suspended {

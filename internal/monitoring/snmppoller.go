@@ -127,7 +127,7 @@ func performSNMPQueryWithCircuitBreaker(device state.Device, snmpConfig *config.
 	// Query standard MIB-II system OIDs: sysName, sysDescr
 	// Using snmp.GetWithFallback to handle devices that don't support .0 instance
 	oids := []string{"1.3.6.1.2.1.1.5.0", "1.3.6.1.2.1.1.1.0"}
-	resp, err := snmp.GetWithFallback(params, oids)
+	resp, err := snmp.GetWithFallback(&snmp.GoSNMPWrapper{GoSNMP: params}, oids)
 	if err != nil || len(resp.Variables) < 2 {
 		log.Debug().
 			Str("ip", device.IP).

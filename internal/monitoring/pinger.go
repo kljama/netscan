@@ -29,8 +29,11 @@ type StateManager interface {
 	IsSuspended(ip string) bool
 }
 
+// PingFunc defines the function signature for performing a ping
+type PingFunc func(device state.Device, timeout time.Duration, writer PingWriter, stateMgr StateManager, inFlightCounter *atomic.Int64, totalPingsSent *atomic.Uint64, maxConsecutiveFails int, backoffDuration time.Duration)
+
 // StartPinger runs continuous ICMP monitoring for a single device
-func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, interval time.Duration, timeout time.Duration, writer PingWriter, stateMgr StateManager, limiter *rate.Limiter, inFlightCounter *atomic.Int64, totalPingsSent *atomic.Uint64, maxConsecutiveFails int, backoffDuration time.Duration) {
+func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, interval time.Duration, timeout time.Duration, writer PingWriter, stateMgr StateManager, limiter *rate.Limiter, inFlightCounter *atomic.Int64, totalPingsSent *atomic.Uint64, maxConsecutiveFails int, backoffDuration time.Duration, pingOp PingFunc) {
 	// Panic recovery for pinger goroutine
 	defer func() {
 		if r := recover(); r != nil {
@@ -44,11 +47,16 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 	if wg != nil {
 		defer wg.Done()
 	}
-	
+
+	// Use default ping operation if none provided
+	if pingOp == nil {
+		pingOp = performPingWithCircuitBreaker
+	}
+
 	// Initialize timer for first ping with 1 second delay to avoid immediate ping storm
 	timer := time.NewTimer(1 * time.Second)
 	defer timer.Stop()
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -59,7 +67,7 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 			// 1. CHECK CIRCUIT BREAKER *BEFORE* ACQUIRING TOKEN
 			if stateMgr.IsSuspended(device.IP) {
 				log.Debug().Str("ip", device.IP).Msg("Device ping is suspended (circuit breaker), skipping.")
-				
+
 				// Write suspension status to InfluxDB so we can track which devices are suspended
 				if err := writer.WritePingResult(device.IP, 0, false, true); err != nil {
 					log.Error().
@@ -67,7 +75,7 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 						Err(err).
 						Msg("Failed to write suspension status")
 				}
-				
+
 				timer.Reset(interval) // Reset timer and wait for next cycle
 				continue              // Skip ping logic entirely
 			}
@@ -79,8 +87,8 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 			}
 
 			// 3. Perform the ping operation with in-flight tracking and circuit breaker
-			performPingWithCircuitBreaker(device, timeout, writer, stateMgr, inFlightCounter, totalPingsSent, maxConsecutiveFails, backoffDuration)
-			
+			pingOp(device, timeout, writer, stateMgr, inFlightCounter, totalPingsSent, maxConsecutiveFails, backoffDuration)
+
 			// 4. Reset timer to schedule next ping after interval
 			// This ensures interval is time BETWEEN pings, not fixed schedule
 			timer.Reset(interval)
@@ -116,9 +124,9 @@ func performPing(device state.Device, timeout time.Duration, writer PingWriter, 
 			Msg("Failed to create pinger")
 		return // Skip invalid IP configurations
 	}
-	pinger.Count = 1                              // Single ICMP echo request per interval
-	pinger.Timeout = timeout                      // Use configured ping timeout
-	pinger.SetPrivileged(true)                    // Use raw ICMP sockets (requires root)
+	pinger.Count = 1           // Single ICMP echo request per interval
+	pinger.Timeout = timeout   // Use configured ping timeout
+	pinger.SetPrivileged(true) // Use raw ICMP sockets (requires root)
 	if err := pinger.Run(); err != nil {
 		// Distinguish between network-level errors (fast failure) and other errors
 		// Network unreachable errors indicate routing/ARP issues and are fast failures (<10ms)
@@ -140,7 +148,7 @@ func performPing(device state.Device, timeout time.Duration, writer PingWriter, 
 	// Determine success based on RTT data rather than just PacketsRecv
 	// This is more reliable as the RTT measurements directly prove we got a response
 	successful := len(stats.Rtts) > 0 && stats.AvgRtt > 0
-	
+
 	if successful {
 		log.Debug().
 			Str("ip", device.IP).
@@ -182,7 +190,7 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 		// Ensure counter is decremented when ping operation completes
 		defer inFlightCounter.Add(-1)
 	}
-	
+
 	// Increment total pings sent counter (for observability)
 	if totalPingsSent != nil {
 		totalPingsSent.Add(1)
@@ -207,9 +215,9 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 			Msg("Failed to create pinger")
 		return // Skip invalid IP configurations
 	}
-	pinger.Count = 1                              // Single ICMP echo request per interval
-	pinger.Timeout = timeout                      // Use configured ping timeout
-	pinger.SetPrivileged(true)                    // Use raw ICMP sockets (requires root)
+	pinger.Count = 1           // Single ICMP echo request per interval
+	pinger.Timeout = timeout   // Use configured ping timeout
+	pinger.SetPrivileged(true) // Use raw ICMP sockets (requires root)
 	if err := pinger.Run(); err != nil {
 		// Distinguish between network-level errors (fast failure) and other errors
 		// Network unreachable errors indicate routing/ARP issues and are fast failures (<10ms)
@@ -233,7 +241,7 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 	// Determine success based on RTT data rather than just PacketsRecv
 	// This is more reliable as the RTT measurements directly prove we got a response
 	successful := len(stats.Rtts) > 0 && stats.AvgRtt > 0
-	
+
 	if successful {
 		log.Debug().
 			Str("ip", device.IP).
@@ -241,13 +249,13 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 			Int("packets_recv", stats.PacketsRecv).
 			Int("packets_sent", stats.PacketsSent).
 			Msg("Ping successful")
-		
+
 		// Report success to circuit breaker (resets failure count)
 		if stateMgr != nil {
 			stateMgr.ReportPingSuccess(device.IP)
 			stateMgr.UpdateLastSeen(device.IP)
 		}
-		
+
 		if err := writer.WritePingResult(device.IP, stats.AvgRtt, true, false); err != nil {
 			log.Error().
 				Str("ip", device.IP).
@@ -261,7 +269,7 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 			Int("packets_sent", stats.PacketsSent).
 			Dur("avg_rtt", stats.AvgRtt).
 			Msg("Ping failed - no response")
-		
+
 		// Report failure to circuit breaker
 		if stateMgr != nil {
 			wasSuspended := stateMgr.ReportPingFail(device.IP, maxConsecutiveFails, backoffDuration)
@@ -272,7 +280,7 @@ func performPingWithCircuitBreaker(device state.Device, timeout time.Duration, w
 					Msg("Device ping failed max attempts, suspending device (circuit breaker tripped)")
 			}
 		}
-		
+
 		if err := writer.WritePingResult(device.IP, 0, false, false); err != nil {
 			log.Error().
 				Str("ip", device.IP).

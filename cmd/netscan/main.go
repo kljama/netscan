@@ -436,7 +436,7 @@ func main() {
 						}()
 
 						// Run the actual pinger
-						monitoring.StartPinger(ctx, &pingerWg, d, cfg.PingInterval, cfg.PingTimeout, writer, stateMgr, pingRateLimiter, &currentInFlightPings, &totalPingsSent, cfg.PingMaxConsecutiveFails, cfg.PingBackoffDuration)
+						monitoring.StartPinger(ctx, &pingerWg, d, cfg.PingInterval, cfg.PingTimeout, writer, stateMgr, pingRateLimiter, &currentInFlightPings, &totalPingsSent, cfg.PingMaxConsecutiveFails, cfg.PingBackoffDuration, nil)
 
 						// Notify that this pinger has exited
 						select {

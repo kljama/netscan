@@ -73,7 +73,7 @@ func TestStartPingerCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var counter atomic.Int64
-	go StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute)
+	go StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
 	time.Sleep(30 * time.Millisecond)
 	cancel()
 	if !writer.called {
