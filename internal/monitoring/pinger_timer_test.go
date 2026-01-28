@@ -50,7 +50,7 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 	}()
 
 	// Start pinger
-	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 
 	// Wait for test to complete
 	<-ctx.Done()
@@ -110,7 +110,7 @@ func TestTimerResetAfterPing(t *testing.T) {
 	defer cancel()
 
 	// Mock ping function that simulates work
-	mockPing := func(device state.Device, timeout time.Duration, writer PingWriter, stateMgr StateManager, inFlightCounter *atomic.Int64, totalPingsSent *atomic.Uint64, maxConsecutiveFails int, backoffDuration time.Duration) {
+	mockPing := func(device state.Device, timeout time.Duration, writer PingWriter, stateMgr StateManager, inFlightCounter *atomic.Int64, totalPingsSent *atomic.Uint64) {
 		if inFlightCounter != nil {
 			inFlightCounter.Add(1)
 			defer inFlightCounter.Add(-1)
@@ -120,7 +120,7 @@ func TestTimerResetAfterPing(t *testing.T) {
 	}
 
 	// Start pinger with mock function
-	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, mockPing)
+	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPing)
 
 	// Wait for test to complete
 	<-ctx.Done()
@@ -153,7 +153,7 @@ func TestTimerStopOnContextCancel(t *testing.T) {
 
 	done := make(chan bool)
 	go func() {
-		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 		done <- true
 	}()
 

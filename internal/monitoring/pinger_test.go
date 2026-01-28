@@ -23,12 +23,11 @@ type mockWriter struct {
 }
 
 // Satisfy influx.Writer interface
-func (m *mockWriter) WritePingResult(ip string, rtt time.Duration, successful bool, suspended bool) error {
+func (m *mockWriter) WritePingResult(ip string, rtt time.Duration, successful bool) error {
 	m.called = true
 	m.ip = ip
 	m.rtt = rtt
 	m.success = successful
-	m.suspended = suspended
 	return nil
 }
 
@@ -53,16 +52,6 @@ func (m *mockStateManager) ReportPingSuccess(ip string) {
 	// Mock implementation - could track calls if needed
 }
 
-func (m *mockStateManager) ReportPingFail(ip string, maxFails int, backoff time.Duration) bool {
-	// Mock implementation - return false (not suspended)
-	return false
-}
-
-func (m *mockStateManager) IsSuspended(ip string) bool {
-	// Mock implementation - return false (not suspended)
-	return false
-}
-
 func TestStartPingerCancel(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("Test requires root privileges for ICMP ping")
@@ -73,7 +62,7 @@ func TestStartPingerCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var counter atomic.Int64
-	go StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, 10, 5*time.Minute, nil)
+	go StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
 	time.Sleep(30 * time.Millisecond)
 	cancel()
 	if !writer.called {

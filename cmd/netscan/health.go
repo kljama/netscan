@@ -28,13 +28,13 @@ type HealthServer struct {
 
 // HealthResponse represents the health check JSON response
 type HealthResponse struct {
-	Status             string    `json:"status"`              // "healthy", "degraded", "unhealthy"
-	Version            string    `json:"version"`             // Version string
-	Uptime             string    `json:"uptime"`              // Human readable uptime
-	DeviceCount        int       `json:"device_count"`        // Number of monitored devices
-	SuspendedDevices   int       `json:"suspended_devices"`   // Number of suspended devices (circuit breaker)
-	ActivePingers      int       `json:"active_pingers"`      // Number of active pinger goroutines (accurate count)
-	InfluxDBOK         bool      `json:"influxdb_ok"`         // InfluxDB connectivity status
+	Status             string    `json:"status"`                 // "healthy", "degraded", "unhealthy"
+	Version            string    `json:"version"`                // Version string
+	Uptime             string    `json:"uptime"`                 // Human readable uptime
+	DeviceCount        int       `json:"device_count"`           // Number of monitored devices
+	SNMPSuspendedDevices int     `json:"snmp_suspended_devices"` // Number of suspended devices (SNMP circuit breaker)
+	ActivePingers      int       `json:"active_pingers"`         // Number of active pinger goroutines (accurate count)
+	InfluxDBOK         bool      `json:"influxdb_ok"`            // InfluxDB connectivity status
 	InfluxDBSuccessful uint64    `json:"influxdb_successful"` // Successful batch writes
 	InfluxDBFailed     uint64    `json:"influxdb_failed"`     // Failed batch writes
 	DroppedPoints      uint64    `json:"dropped_points"`      // Points dropped due to full buffer
@@ -112,14 +112,14 @@ func (hs *HealthServer) GetHealthMetrics() HealthResponse {
 	}
 
 	return HealthResponse{
-		Status:             status,
-		Version:            Version,
-		Uptime:             time.Since(hs.startTime).String(),
-		DeviceCount:        hs.stateMgr.Count(),
-		SuspendedDevices:   hs.stateMgr.GetSuspendedCount(),
-		ActivePingers:      hs.getPingerCount(), // Accurate count from activePingers map
-		InfluxDBOK:         influxOK,
-		InfluxDBSuccessful: hs.writer.GetSuccessfulBatches(),
+		Status:               status,
+		Version:              Version,
+		Uptime:               time.Since(hs.startTime).String(),
+		DeviceCount:          hs.stateMgr.Count(),
+		SNMPSuspendedDevices: hs.stateMgr.GetSNMPSuspendedCount(),
+		ActivePingers:        hs.getPingerCount(), // Accurate count from activePingers map
+		InfluxDBOK:           influxOK,
+		InfluxDBSuccessful:   hs.writer.GetSuccessfulBatches(),
 		InfluxDBFailed:     hs.writer.GetFailedBatches(),
 		DroppedPoints:      hs.writer.GetDroppedPoints(),
 		PingsSentTotal:     hs.getPingsSentCount(), // Total pings sent counter

@@ -79,12 +79,6 @@ ping_timeout: "3s"
 ping_rate_limit: 64.0   # Default: 64 pings per second (tokens/sec)
 ping_burst_limit: 256   # Default: 256 ping burst capacity
 
-# Circuit breaker settings for automatic device suspension
-# Automatically suspends devices that fail ping checks consecutively
-# This prevents wasting resources on devices that are likely offline
-ping_max_consecutive_fails: 10  # Default: 10 consecutive failures before suspension
-ping_backoff_duration: "5m"     # Default: 5 minute suspension after max failures
-
 # =============================================================================
 # PERFORMANCE TUNING
 # =============================================================================

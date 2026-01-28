@@ -436,7 +436,7 @@ func main() {
 						}()
 
 						// Run the actual pinger
-						monitoring.StartPinger(ctx, &pingerWg, d, cfg.PingInterval, cfg.PingTimeout, writer, stateMgr, pingRateLimiter, &currentInFlightPings, &totalPingsSent, cfg.PingMaxConsecutiveFails, cfg.PingBackoffDuration, nil)
+						monitoring.StartPinger(ctx, &pingerWg, d, cfg.PingInterval, cfg.PingTimeout, writer, stateMgr, pingRateLimiter, &currentInFlightPings, &totalPingsSent, nil)
 
 						// Notify that this pinger has exited
 						select {
@@ -582,8 +582,8 @@ func main() {
 				metrics.ActivePingers,
 				metrics.Goroutines,
 				int(metrics.MemoryMB),
-				int(metrics.RSSMB),       // new RSS value (MB)
-				metrics.SuspendedDevices, // suspended device count
+				int(metrics.RSSMB),           // new RSS value (MB)
+				metrics.SNMPSuspendedDevices, // suspended device count
 				metrics.InfluxDBOK,
 				metrics.InfluxDBSuccessful,
 				metrics.InfluxDBFailed,
