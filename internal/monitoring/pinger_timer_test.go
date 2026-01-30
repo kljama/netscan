@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,12 +29,15 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 	defer cancel()
 
-	// Track max in-flight count
-	var maxInFlight int64
+	// Track max in-flight count (use atomic to prevent race condition)
+	var maxInFlight atomic.Int64
 
 	// Monitor in-flight counter
 	done := make(chan struct{})
+	var monitorWg sync.WaitGroup
+	monitorWg.Add(1)
 	go func() {
+		defer monitorWg.Done()
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -42,8 +46,8 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 				return
 			case <-ticker.C:
 				current := counter.Load()
-				if current > maxInFlight {
-					maxInFlight = current
+				if current > maxInFlight.Load() {
+					maxInFlight.Store(current)
 				}
 			}
 		}
@@ -55,14 +59,14 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 	// Wait for test to complete
 	<-ctx.Done()
 	close(done)
-	time.Sleep(100 * time.Millisecond) // Allow cleanup
+	monitorWg.Wait() // Wait for monitor goroutine to finish before reading maxInFlight
 
 	// With timer-based approach and rate limiting:
 	// - The rate limiter limits to 1 ping/sec
 	// - Timer resets AFTER each ping completes
 	// - Max in-flight should never exceed burst size (1)
-	if maxInFlight > 1 {
-		t.Errorf("Expected max in-flight <= 1 (rate limit burst), got %d - suggests thundering herd", maxInFlight)
+	if maxInFlight.Load() > 1 {
+		t.Errorf("Expected max in-flight <= 1 (rate limit burst), got %d - suggests thundering herd", maxInFlight.Load())
 	}
 
 	// Counter should be 0 after pinger stops
@@ -85,7 +89,7 @@ func TestTimerResetAfterPing(t *testing.T) {
 	// Set a known interval
 	interval := 50 * time.Millisecond // Faster interval for testing
 
-	// Track the maximum in-flight counter value (use atomic to prevent race condition)
+	// Track how many times we observe the counter > 0 (counts observations, not maximum)
 	var observedCounterIncrements atomic.Int64
 
 	done := make(chan struct{})

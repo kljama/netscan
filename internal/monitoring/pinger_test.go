@@ -104,10 +104,21 @@ func TestStartPingerCancel(t *testing.T) {
 	limiter := rate.NewLimiter(rate.Limit(100.0), 256)
 	var counter atomic.Int64
 	go StartPinger(ctx, nil, dev, 10*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
-	// Wait for initial 1s delay + time for first ping to execute
-	time.Sleep(1100 * time.Millisecond)
+	
+	// Poll WasCalled() with a deadline instead of fixed sleep to avoid flakiness
+	deadline := time.Now().Add(2 * time.Second)
+	called := false
+	for time.Now().Before(deadline) {
+		if writer.WasCalled() {
+			called = true
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	
 	cancel()
-	if !writer.WasCalled() {
-		t.Errorf("expected WritePingResult to be called")
+	
+	if !called {
+		t.Errorf("expected WritePingResult to be called within 2 seconds")
 	}
 }
