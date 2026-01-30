@@ -24,24 +24,57 @@
 netscan uses a multi-ticker event loop to manage independent workflows for discovery, monitoring, and state management.
 
 ```mermaid
-graph TD
+graph LR
     subgraph "Event Core"
-        Scheduler[Ticker Scheduler] --> Discovery[ICMP Discovery]
-        Scheduler --> Recon[Reconciliation Loop]
+        direction TB
+        DiscoveryTicker[Discovery Ticker]
+        PingerReconTicker[Pinger Recon Ticker]
+        SNMPReconTicker[SNMP Recon Ticker]
+        PruneTicker[Prune Ticker]
+    end
+
+    subgraph "Discovery"
+        direction TB
+        DiscoveryFunc[ICMP Discovery Scan]
+        InitSNMP[Initial SNMP Scan]
     end
 
     subgraph "Workers"
-        Discovery -->|Found IPs| StateMgr[State Manager]
-        StateMgr -->|New Device| SNMP[SNMP Worker]
-        Recon -->|Sync| PingerPool[Pinger Pool]
-        Recon -->|Sync| SNMPPool[SNMP Poller Pool]
+        direction TB
+        PingerPool[Pinger Pool]
+        SNMPPool[SNMP Poller Pool]
+        StatePrune[State Pruning]
     end
 
-    subgraph "External"
-        PingerPool -->|ICMP Echo| Network[Target Network]
-        SNMPPool -->|Get Request| Network
-        StateMgr -->|Metrics Batch| Influx[InfluxDB v2]
+    subgraph "State & Storage"
+        direction TB
+        StateMgr[State Manager]
+        Influx[InfluxDB v2]
     end
+
+    %% Event Triggers
+    DiscoveryTicker -->|Trigger| DiscoveryFunc
+    PingerReconTicker -->|Trigger| PingerRecon[Pinger Recon]
+    SNMPReconTicker -->|Trigger| SNMPRecon[SNMP Recon]
+    PruneTicker -->|Trigger| StatePrune
+
+    %% Worker Management
+    PingerRecon -->|Spawn/Stop| PingerPool
+    SNMPRecon -->|Spawn/Stop| SNMPPool
+
+    %% Data Flow
+    DiscoveryFunc -->|Found IPs| StateMgr
+    StateMgr -->|New Device| InitSNMP
+    
+    InitSNMP -->|Update| StateMgr
+    InitSNMP -->|Metrics| Influx
+
+    PingerPool -->|Metrics| Influx
+    PingerPool -->|Update LastSeen| StateMgr
+    SNMPPool -->|Metrics| Influx
+    SNMPPool -->|Update Meta| StateMgr
+    
+    StatePrune -->|Remove Stale| StateMgr
 ```
 
 ---
