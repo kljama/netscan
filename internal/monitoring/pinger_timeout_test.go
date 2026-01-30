@@ -56,7 +56,7 @@ func TestTimeoutParameterPropagation(t *testing.T) {
 
 			// This should compile and accept timeout parameter without error
 			// The goroutine will exit almost immediately due to context timeout
-			StartPinger(ctx, nil, dev, tt.interval, tt.timeout, writer, stateMgr, limiter, &counter, nil, nil)
+			StartPinger(ctx, nil, dev, tt.interval, tt.timeout, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 
 			// Wait for context to expire
 			<-ctx.Done()
@@ -92,7 +92,7 @@ func TestTimeoutNotHardcoded(t *testing.T) {
 		var counter atomic.Int64
 
 		// Should accept any reasonable timeout value
-		StartPinger(ctx, nil, dev, 100*time.Millisecond, timeout, writer, stateMgr, limiter, &counter, nil, nil)
+		StartPinger(ctx, nil, dev, 100*time.Millisecond, timeout, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 
 		<-ctx.Done()
 		cancel()

@@ -50,7 +50,7 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 	}()
 
 	// Start pinger
-	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
+	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 
 	// Wait for test to complete
 	<-ctx.Done()
@@ -85,8 +85,8 @@ func TestTimerResetAfterPing(t *testing.T) {
 	// Set a known interval
 	interval := 50 * time.Millisecond // Faster interval for testing
 
-	// Track the maximum in-flight counter value
-	var observedCounterIncrements int64
+	// Track the maximum in-flight counter value (use atomic to prevent race condition)
+	var observedCounterIncrements atomic.Int64
 
 	done := make(chan struct{})
 	go func() {
@@ -99,7 +99,7 @@ func TestTimerResetAfterPing(t *testing.T) {
 			case <-ticker.C:
 				current := counter.Load()
 				if current > 0 {
-					observedCounterIncrements++
+					observedCounterIncrements.Add(1)
 				}
 			}
 		}
@@ -129,8 +129,8 @@ func TestTimerResetAfterPing(t *testing.T) {
 
 	// We should see the counter increment at least once
 	// This proves the timer is firing and the pinger is running
-	if observedCounterIncrements < 1 {
-		t.Errorf("Expected to observe counter increments (at least 1), got %d", observedCounterIncrements)
+	if observedCounterIncrements.Load() < 1 {
+		t.Errorf("Expected to observe counter increments (at least 1), got %d", observedCounterIncrements.Load())
 	}
 
 	// Counter should be 0 after pinger stops
@@ -153,7 +153,7 @@ func TestTimerStopOnContextCancel(t *testing.T) {
 
 	done := make(chan bool)
 	go func() {
-		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
+		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 		done <- true
 	}()
 
