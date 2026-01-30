@@ -26,7 +26,7 @@ func TestPingsSentCounterIncrement(t *testing.T) {
 	defer cancel()
 
 	// Start pinger with both counters
-	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, nil)
+	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, mockPingFunc)
 
 	// Wait for initial delay (1s) plus some pings to occur
 	time.Sleep(1300 * time.Millisecond)
@@ -71,7 +71,7 @@ func TestPingsSentCounterNilSafe(t *testing.T) {
 	defer cancel()
 
 	// Start pinger with nil totalPingsSent counter (should not panic)
-	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, nil, nil)
+	go StartPinger(ctx, nil, dev, 50*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, nil, mockPingFunc)
 
 	// Wait for some pings to occur (after 1s delay)
 	time.Sleep(1100 * time.Millisecond)
@@ -99,7 +99,7 @@ func TestPingsSentCounterMonotonicity(t *testing.T) {
 	defer cancel()
 
 	// Start pinger
-	go StartPinger(ctx, nil, dev, 30*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, nil)
+	go StartPinger(ctx, nil, dev, 30*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, mockPingFunc)
 
 	// Monitor the counter for monotonicity
 	var lastValue uint64
@@ -160,7 +160,7 @@ func TestPingsSentCounterConcurrency(t *testing.T) {
 	for i := 0; i < numPingers; i++ {
 		dev := state.Device{IP: "192.168.1." + string(rune('1'+i)), Hostname: "test"}
 		var inFlightCounter atomic.Int64
-		go StartPinger(ctx, nil, dev, 40*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, nil)
+		go StartPinger(ctx, nil, dev, 40*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &inFlightCounter, &totalPingsSent, mockPingFunc)
 	}
 
 	// Wait for initial delay + some pings

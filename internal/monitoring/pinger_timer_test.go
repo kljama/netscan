@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,12 +29,15 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 	defer cancel()
 
-	// Track max in-flight count
-	var maxInFlight int64
+	// Track max in-flight count (use atomic to prevent race condition)
+	var maxInFlight atomic.Int64
 
 	// Monitor in-flight counter
 	done := make(chan struct{})
+	var monitorWg sync.WaitGroup
+	monitorWg.Add(1)
 	go func() {
+		defer monitorWg.Done()
 		ticker := time.NewTicker(10 * time.Millisecond)
 		defer ticker.Stop()
 		for {
@@ -42,27 +46,27 @@ func TestTimerBehaviorNonAccumulating(t *testing.T) {
 				return
 			case <-ticker.C:
 				current := counter.Load()
-				if current > maxInFlight {
-					maxInFlight = current
+				if current > maxInFlight.Load() {
+					maxInFlight.Store(current)
 				}
 			}
 		}
 	}()
 
 	// Start pinger
-	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
+	go StartPinger(ctx, nil, dev, interval, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 
 	// Wait for test to complete
 	<-ctx.Done()
 	close(done)
-	time.Sleep(100 * time.Millisecond) // Allow cleanup
+	monitorWg.Wait() // Wait for monitor goroutine to finish before reading maxInFlight
 
 	// With timer-based approach and rate limiting:
 	// - The rate limiter limits to 1 ping/sec
 	// - Timer resets AFTER each ping completes
 	// - Max in-flight should never exceed burst size (1)
-	if maxInFlight > 1 {
-		t.Errorf("Expected max in-flight <= 1 (rate limit burst), got %d - suggests thundering herd", maxInFlight)
+	if maxInFlight.Load() > 1 {
+		t.Errorf("Expected max in-flight <= 1 (rate limit burst), got %d - suggests thundering herd", maxInFlight.Load())
 	}
 
 	// Counter should be 0 after pinger stops
@@ -85,8 +89,8 @@ func TestTimerResetAfterPing(t *testing.T) {
 	// Set a known interval
 	interval := 50 * time.Millisecond // Faster interval for testing
 
-	// Track the maximum in-flight counter value
-	var observedCounterIncrements int64
+	// Track how many times we observe the counter > 0 (counts observations, not maximum)
+	var observedCounterIncrements atomic.Int64
 
 	done := make(chan struct{})
 	go func() {
@@ -99,7 +103,7 @@ func TestTimerResetAfterPing(t *testing.T) {
 			case <-ticker.C:
 				current := counter.Load()
 				if current > 0 {
-					observedCounterIncrements++
+					observedCounterIncrements.Add(1)
 				}
 			}
 		}
@@ -129,8 +133,8 @@ func TestTimerResetAfterPing(t *testing.T) {
 
 	// We should see the counter increment at least once
 	// This proves the timer is firing and the pinger is running
-	if observedCounterIncrements < 1 {
-		t.Errorf("Expected to observe counter increments (at least 1), got %d", observedCounterIncrements)
+	if observedCounterIncrements.Load() < 1 {
+		t.Errorf("Expected to observe counter increments (at least 1), got %d", observedCounterIncrements.Load())
 	}
 
 	// Counter should be 0 after pinger stops
@@ -153,7 +157,7 @@ func TestTimerStopOnContextCancel(t *testing.T) {
 
 	done := make(chan bool)
 	go func() {
-		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, nil)
+		StartPinger(ctx, nil, dev, 100*time.Millisecond, 2*time.Second, writer, stateMgr, limiter, &counter, nil, mockPingFunc)
 		done <- true
 	}()
 
