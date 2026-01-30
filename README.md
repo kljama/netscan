@@ -1,98 +1,109 @@
 # netscan
 
-network monitoring service that performs automated ICMP discovery, continuous ping monitoring and SNMP metadata collection with time-series storage in InfluxDB.
+![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?style=flat&logo=go)
+![Docker](https://img.shields.io/badge/docker-v20.10+-2496ED?style=flat&logo=docker)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+
+**netscan** is a high-performance network monitoring service designed for scale and reliability. It combines automated device discovery with real-time uptime monitoring and metadata enrichment, all powered by a robust event-driven architecture.
 
 ---
 
-## Docker Quick Start
+## 🚀 Key Features
 
-**1. Clone the Repository**
+*   **🔍 Automated Discovery**: Randomized ICMP sweeps across multiple subnets to automatically find new devices.
+*   **⚡ Real-Time Monitoring**: High-concurrency pinger engine capable of monitoring 20,000+ devices.
+*   **📝 SNMP Enrichment**: Automatically detects hostnames and system descriptions for discovered devices.
+*   **🛡️ Resilient Architecture**: Built-in circuit breakers, rate limiters, and self-healing reconciliation loops.
+*   **📊 InfluxDB Integration**: Native support for InfluxDB v2, separating operational metrics from health telemetry.
+*   **🔒 Secure Deployment**: Supports rootless execution via capability-based security (`CAP_NET_RAW`).
+
+---
+
+## 🏗️ Architecture
+
+netscan uses a multi-ticker event loop to manage independent workflows for discovery, monitoring, and state management.
+
+```mermaid
+graph TD
+    subgraph "Event Core"
+        Scheduler[Ticker Scheduler] --> Discovery[ICMP Discovery]
+        Scheduler --> Recon[Reconciliation Loop]
+    end
+
+    subgraph "Workers"
+        Discovery -->|Found IPs| StateMgr[State Manager]
+        StateMgr -->|New Device| SNMP[SNMP Worker]
+        Recon -->|Sync| PingerPool[Pinger Pool]
+        Recon -->|Sync| SNMPPool[SNMP Poller Pool]
+    end
+
+    subgraph "External"
+        PingerPool -->|ICMP Echo| Network[Target Network]
+        SNMPPool -->|Get Request| Network
+        StateMgr -->|Metrics Batch| Influx[InfluxDB v2]
+    end
+```
+
+---
+
+## 🐳 Docker Quick Start
+
+Get up and running in minutes with the pre-configured Docker stack.
+
+### Prerequisites
+*   Docker Engine 20.10+
+*   Docker Compose V2
+
+### 1. Clone & Configure
 ```bash
 git clone https://github.com/kljama/netscan.git
 cd netscan
-```
 
-**2. Create Configuration File**
-```bash
+# Create config files
 cp config.yml.example config.yml
+cp .env.example .env
 ```
 
-**3. Edit Your Network Configuration**
-
-
-Open `config.yml` and modify the `networks:` section:
+### 2. Set Your Network Range
+Open `config.yml` and set your **actual** network CIDR.
 ```yaml
 networks:
-  - "192.168.1.0/24"    # Replace with YOUR actual network range
-  - "10.0.50.0/24"      # Add additional ranges as needed
+  - "192.168.1.0/24"  # <--- Change this to your network!
 ```
 
-Use `ip addr` (Linux) or `ipconfig` (Windows) to determine your network range.
-
-**4. (Optional) Configure Production Credentials**
-
-For production deployments, create a `.env` file to override default credentials:
-```bash
-cp .env.example .env
-# Edit .env with your secure credentials
-```
-
-See [MANUAL.md](MANUAL.md#3-configure-credentials-optional-but-recommended-for-production) for details.
-
-**5. Start the Service**
+### 3. Launch
 ```bash
 docker compose up -d
 ```
-
-This starts both netscan and InfluxDB v2.7 using default credentials (suitable for testing).
+Access the **InfluxDB UI** at `https://localhost` (User: `admin`, Pass: `admin123`).
 
 ---
 
-## Verify It's Running
+## 🛠️ Deployment Options
 
-**View Logs:**
+| Method | Best For | Description |
+|--------|----------|-------------|
+| **Docker Compose** | Testing & Small Prod | Easiest setup. Orchestrates netscan + InfluxDB together. |
+| **Native Systemd** | Production Security | Runs as dedicated user with minimal capabilities. |
+
+> See **[MANUAL.md](MANUAL.md)** for detailed deployment guides, security hardening, and configuration references.
+
+---
+
+## 🔍 Verification
+
+Check if the service is running correctly:
+
 ```bash
+# View live logs
 docker compose logs -f netscan
-```
 
-**Check Health Status:**
-```bash
+# Check health endpoint
 curl http://localhost:8080/health
 ```
 
-**Access InfluxDB UI (optional):**  
-Navigate to **https://localhost** in your browser
-
-> **Self-Signed Certificate Warning:** 
-
-* Username: `admin`
-* Password: `admin123`
-* Organization: `test-org`
-
 ---
 
-## Stopping the Service
+## 📜 License
 
-**Stop (keeps data):**
-```bash
-docker compose down
-```
-
-**Stop and delete all data:**
-```bash
-docker compose down -v
-```
-
----
-
-## Further Documentation
-
-For detailed configuration, performance tuning, troubleshooting, and advanced deployment options, see **[MANUAL.md](MANUAL.md)**.
-
-**Alternative Deployment:** A native systemd deployment option is available for maximum security (runs as non-root with capability-based ICMP access). See [MANUAL.md](MANUAL.md) for instructions.
-
----
-
-## License
-
-MIT License - See LICENSE.md
+MIT License - See [LICENSE.md](LICENSE.md)

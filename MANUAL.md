@@ -709,7 +709,8 @@ If you prefer manual installation or need to customize:
 
 ```bash
 # 1. Build binary
-go build -o netscan ./cmd/netscan
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+go build -ldflags "-X main.Version=$VERSION" -o netscan ./cmd/netscan
 
 # 2. Create user
 sudo useradd -r -s /bin/false netscan

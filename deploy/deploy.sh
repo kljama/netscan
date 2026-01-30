@@ -51,8 +51,8 @@ check_go() {
     local minor_version
     minor_version=$(echo "$go_version" | cut -d. -f2)
 
-    if [[ $major_version -lt 1 ]] || [[ $major_version -eq 1 && $minor_version -lt 21 ]]; then
-        error_exit "Go version 1.21+ required. Found: $go_version"
+    if [[ $major_version -lt 1 ]] || [[ $major_version -eq 1 && $minor_version -lt 25 ]]; then
+        error_exit "Go version 1.25+ required. Found: $go_version"
     fi
 
     log_info "Go $go_version found ✓"
@@ -61,7 +61,13 @@ check_go() {
 # Build the binary
 build_binary() {
     log_info "Building netscan binary..."
-    if ! go build -o "$BINARY" ./cmd/netscan; then
+    
+    # Get version info
+    local version
+    version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+    log_info "Building version: $version"
+
+    if ! go build -ldflags "-X main.Version=$version" -o "$BINARY" ./cmd/netscan; then
         error_exit "Failed to build netscan binary"
     fi
 
