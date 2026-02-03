@@ -250,10 +250,7 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 
 // WritePingResult writes ICMP ping metrics to InfluxDB (optimized for time-series)
 func (w *Writer) WritePingResult(ip string, rtt time.Duration, successful bool) error {
-	// Validate IP address
-	if err := validateIPAddress(ip); err != nil {
-		return fmt.Errorf("invalid IP address for ping result: %v", err)
-	}
+	// IP address is validated by the caller (StartPinger) to avoid redundant checks in hot path
 
 	// Validate RTT values
 	if rtt < 0 {
