@@ -6,7 +6,7 @@
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 *   **Automated Discovery**: Randomized ICMP sweeps across multiple subnets to automatically find new devices.
 *   **Real-Time Monitoring**
