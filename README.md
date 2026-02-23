@@ -74,6 +74,6 @@ curl http://localhost:8080/health
 
 ---
 
-## 📜 License
+## License
 
 MIT License - See [LICENSE.md](LICENSE.md)
