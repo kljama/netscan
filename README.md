@@ -1,6 +1,6 @@
 # netscan
 
-![Go Version](https://img.shields.io/badge/go-1.25+-00ADD8?style=flat&logo=go)
+![Go Version](https://img.shields.io/badge/go-1.26-00ADD8?style=flat&logo=go)
 ![Docker](https://img.shields.io/badge/docker-v20.10+-2496ED?style=flat&logo=docker)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
