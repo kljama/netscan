@@ -29,7 +29,7 @@ networks:
 
 
 # How often to run ICMP discovery to find new devices
-icmp_discovery_interval: "5m"
+icmp_discovery_interval: "4h"
 
 # =============================================================================
 # SNMP SETTINGS
@@ -37,7 +37,7 @@ icmp_discovery_interval: "5m"
 # Continuous SNMP polling interval per device
 # How often to query each device for hostname and sysDescr via SNMP
 # Default: "1h" (poll each device every hour)
-snmp_interval: "1h"
+snmp_interval: "24h"
 
 # Global SNMP query rate limiting (token bucket algorithm)
 # Controls the sustained rate of SNMP queries across all devices to prevent overwhelming SNMP agents
@@ -65,7 +65,7 @@ snmp:
 # MONITORING SETTINGS
 # =============================================================================
 # Ping frequency per monitored device
-ping_interval: "2s"
+ping_interval: "10s"
 
 # Timeout for individual ping operations
 # Default: "3s"
@@ -76,7 +76,7 @@ ping_timeout: "3s"
 # ping_rate_limit: Tokens added per second (sustained ping rate)
 # ping_burst_limit: Token bucket capacity (max burst size)
 # Example: rate=64.0, burst=256 means 64 pings/sec sustained, up to 256 concurrent
-ping_rate_limit: 64.0   # Default: 64 pings per second (tokens/sec)
+ping_rate_limit: 128.0   # Default: 64 pings per second (tokens/sec)
 ping_burst_limit: 256   # Default: 256 ping burst capacity
 
 # =============================================================================
@@ -108,7 +108,7 @@ influxdb:
   health_bucket: "health"     # Bucket for application health metrics (default: 'health')
   batch_size: 5000            # Number of points to batch before writing (default: 5000)
   buffer_size: 100000         # Buffer size for channel - drop points when full (default: 100000)
-  flush_interval: "5s"        # Maximum time to hold points before flushing (default: 5s)
+  flush_interval: "10s"        # Maximum time to hold points before flushing (default: 5s)
 
 # =============================================================================
 # HEALTH CHECK ENDPOINT
