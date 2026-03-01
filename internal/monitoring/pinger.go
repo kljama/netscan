@@ -94,15 +94,6 @@ func performPing(device state.Device, timeout time.Duration, writer PingWriter, 
 
 	log.Debug().Str("ip", device.IP).Msg("Pinging device")
 
-	// Validate IP address before pinging
-	if err := validateIPAddress(device.IP); err != nil {
-		log.Error().
-			Str("ip", device.IP).
-			Err(err).
-			Msg("Invalid IP address")
-		return
-	}
-
 	pinger, err := probing.NewPinger(device.IP)
 	if err != nil {
 		log.Error().
