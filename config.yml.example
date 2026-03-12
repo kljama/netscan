@@ -1,0 +1,129 @@
+# config.yml.example - netscan network monitoring configuration
+#
+# DOCKER DEPLOYMENT:
+# When using Docker Compose, environment variables are automatically provided
+# by docker-compose.yml. Simply copy this file as-is:
+#   cp config.yml.example config.yml
+#
+# Environment variables provided by docker-compose.yml (defaults):
+# - INFLUXDB_TOKEN=netscan-token
+# - INFLUXDB_ORG=test-org
+# - SNMP_COMMUNITY=public
+#
+# For production, customize these in the docker-compose.yml 'environment' section.
+#
+# NATIVE DEPLOYMENT:
+# For native/systemd deployment, create a .env file with these variables
+# or replace ${VAR_NAME} placeholders with actual values.
+# See README_NATIVE.md for details.
+#
+# DO NOT store actual credentials in this config.yml file!
+
+# =============================================================================
+# NETWORK DISCOVERY SETTINGS
+# =============================================================================
+# Network ranges to scan (CIDR notation) - supports multiple subnets
+#
+networks:
+  - "192.168.0.0/24"   # EXAMPLE - Replace with your actual network!
+
+
+# How often to run ICMP discovery to find new devices
+icmp_discovery_interval: "4h"
+
+# =============================================================================
+# SNMP SETTINGS
+# =============================================================================
+# Continuous SNMP polling interval per device
+# How often to query each device for hostname and sysDescr via SNMP
+# Default: "1h" (poll each device every hour)
+snmp_interval: "24h"
+
+# Global SNMP query rate limiting (token bucket algorithm)
+# Controls the sustained rate of SNMP queries across all devices to prevent overwhelming SNMP agents
+# snmp_rate_limit: Tokens added per second (sustained query rate)
+# snmp_burst_limit: Token bucket capacity (max burst size)
+# Example: rate=10.0, burst=50 means 10 queries/sec sustained, up to 50 concurrent
+snmp_rate_limit: 10.0   # Default: 10 SNMP queries per second (tokens/sec)
+snmp_burst_limit: 50    # Default: 50 SNMP query burst capacity
+
+# SNMP circuit breaker settings for automatic device suspension
+# Automatically suspends SNMP polling for devices that fail SNMP queries consecutively
+# This prevents wasting resources on devices with broken/disabled SNMP agents
+snmp_max_consecutive_fails: 5    # Default: 5 consecutive SNMP failures before suspension
+snmp_backoff_duration: "1h"      # Default: 1 hour suspension after max SNMP failures
+
+# SNMPv2c community string for device authentication
+# Uses environment variable expansion (Docker: docker-compose.yml, Native: .env file)
+snmp:
+  community: "${SNMP_COMMUNITY}"  # Default: 'public' (set via docker-compose.yml or .env)
+  port: 161
+  timeout: "5s"
+  retries: 1
+
+# =============================================================================
+# MONITORING SETTINGS
+# =============================================================================
+# Ping frequency per monitored device
+ping_interval: "10s"
+
+# Timeout for individual ping operations
+# Default: "3s"
+ping_timeout: "3s"
+
+# Global ping rate limiting (token bucket algorithm)
+# Controls the sustained rate of ICMP pings across all devices to prevent network bursts
+# ping_rate_limit: Tokens added per second (sustained ping rate)
+# ping_burst_limit: Token bucket capacity (max burst size)
+# Example: rate=64.0, burst=256 means 64 pings/sec sustained, up to 256 concurrent
+ping_rate_limit: 128.0   # Default: 64 pings per second (tokens/sec)
+ping_burst_limit: 256   # Default: 256 ping burst capacity
+
+# =============================================================================
+# PERFORMANCE TUNING
+# =============================================================================
+# Number of concurrent ICMP ping workers for discovery sweeps
+# Recommended values:
+#   - Small networks (<500 devices): 64 workers
+#   - Medium networks (500-2000 devices): 128 workers
+#   - Large networks (2000+ devices): 256 workers
+# WARNING: Values >256 may cause kernel raw socket buffer overflow
+#          leading to false-negative ping failures on continuous monitors
+icmp_workers: 64
+
+# Number of concurrent SNMP polling workers
+# Recommended: 25-50% of icmp_workers to avoid overwhelming SNMP agents
+snmp_workers: 32
+
+# =============================================================================
+# INFLUXDB SETTINGS
+# =============================================================================
+# Time-series database for metrics storage
+# Uses environment variable expansion (Docker: docker-compose.yml, Native: .env file)
+influxdb:
+  url: "http://localhost:8086"
+  token: "${INFLUXDB_TOKEN}"  # Default: 'netscan-token' (set via docker-compose.yml or .env)
+  org: "${INFLUXDB_ORG}"      # Default: 'test-org' (set via docker-compose.yml or .env)
+  bucket: "netscan"           # Bucket for device metrics (ping, device_info)
+  health_bucket: "health"     # Bucket for application health metrics (default: 'health')
+  batch_size: 5000            # Number of points to batch before writing (default: 5000)
+  buffer_size: 100000         # Buffer size for channel - drop points when full (default: 100000)
+  flush_interval: "10s"        # Maximum time to hold points before flushing (default: 5s)
+
+# =============================================================================
+# HEALTH CHECK ENDPOINT
+# =============================================================================
+# HTTP endpoint for monitoring and Docker HEALTHCHECK
+health_check_port: 8080           # Port for health check endpoint (default: 8080)
+                                  # Provides /health, /health/ready, /health/live endpoints
+health_report_interval: "10s"     # Interval for writing health metrics to InfluxDB (default: 10s)
+
+# =============================================================================
+# RESOURCE PROTECTION SETTINGS
+# =============================================================================
+# Limits to prevent resource exhaustion and DoS attacks
+max_concurrent_pingers: 20000       # Maximum number of concurrent ping goroutines
+max_concurrent_snmp_pollers: 20000  # Maximum number of concurrent SNMP poller goroutines
+max_devices: 20000                  # Maximum number of devices to monitor
+min_scan_interval: "1m"             # Minimum interval between discovery scans
+memory_limit_mb: 16384              # Memory usage limit in MB

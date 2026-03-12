@@ -1,0 +1,118 @@
+services:
+  # netscan service - network monitoring application
+  netscan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: netscan
+    restart: unless-stopped
+    
+    # Network mode: host allows netscan to access the host network for ICMP and SNMP
+    network_mode: host
+    
+    # Log rotation configuration to prevent indefinite log file growth
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"  # Maximum size of a single log file
+        max-file: "3"    # Keep 3 most recent log files (~30MB total)
+    
+    # Add Linux capability for raw socket access (ICMP ping)
+    cap_add:
+      - NET_RAW
+    
+    # Mount config file
+    # IMPORTANT: You must create config.yml first with: cp config.yml.example config.yml
+    # The config.yml file should exist in the same directory as docker-compose.yml
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    
+    # Environment variables for config.yml expansion
+    # Docker Compose automatically loads .env file from project directory if it exists
+    # Create .env file from template: cp .env.example .env
+    # If .env doesn't exist, defaults below are used
+    # For production: Create a .env file with these variables to avoid storing credentials here
+    # See README.md for details on using .env file
+    environment:
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-netscan-token}
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-test-org}
+      - SNMP_COMMUNITY=${SNMP_COMMUNITY:-public}
+      
+    # Debug mode true|false  
+      - DEBUG=false
+    # Human friendly console output when set to development  
+      - ENVIRONMENT=development
+      
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    
+    # Ensure InfluxDB is started first
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+  # InfluxDB service for metrics storage
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdbv2
+    # Port 8086 exposed to host for internal service communication
+    # The netscan service uses network_mode: host and needs to connect via localhost:8086
+    # For external browser access, use the nginx proxy at https://localhost (port 443)
+    ports:
+      - "127.0.0.1:8086:8086"  # Bind to localhost only for security
+    
+    # InfluxDB initialization environment variables
+    # Docker Compose automatically loads .env file from project directory if it exists
+    # If .env doesn't exist, defaults below are used
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=${DOCKER_INFLUXDB_INIT_MODE:-setup}
+      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD:-admin123}
+      - DOCKER_INFLUXDB_INIT_ORG=${DOCKER_INFLUXDB_INIT_ORG:-test-org}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET:-netscan}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${DOCKER_INFLUXDB_INIT_RETENTION:-1w}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN:-netscan-token}
+    volumes:
+      - influxdbv2-data:/var/lib/influxdb2
+      - ./scripts/init-influxdb.sh:/docker-entrypoint-initdb.d/init-influxdb.sh:ro
+      - ./influxdb/templates:/templates:ro
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Nginx reverse proxy for secure HTTPS access to InfluxDB UI
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: nginx-proxy
+    restart: unless-stopped
+    
+    # Expose HTTPS (443) and HTTP (80) ports to host
+    # HTTP automatically redirects to HTTPS
+    ports:
+      - "80:80"    # HTTP (redirects to HTTPS)
+      - "443:443"  # HTTPS (SSL termination + proxy to InfluxDB)
+    
+    # Nginx needs InfluxDB to be running
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    
+    # Log rotation configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  influxdbv2-data:
