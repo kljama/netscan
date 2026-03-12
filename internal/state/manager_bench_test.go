@@ -40,6 +40,42 @@ func BenchmarkAddDevice(b *testing.B) {
 	}
 }
 
+// BenchmarkGetAllIPsWithMapConversion simulates the existing usage in main.go
+func BenchmarkGetAllIPsWithMapConversion(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		deviceCount int
+	}{
+		{"GetAllIPsWithMapConversion_100devices", 100},
+		{"GetAllIPsWithMapConversion_1Kdevices", 1000},
+		{"GetAllIPsWithMapConversion_10Kdevices", 10000},
+		{"GetAllIPsWithMapConversion_20Kdevices", 20000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			mgr := NewManager(bm.deviceCount * 2)
+
+			// Populate with devices
+			for i := 0; i < bm.deviceCount; i++ {
+				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
+				mgr.AddDevice(ip)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				currentIPs := mgr.GetAllIPs()
+				currentIPMap := make(map[string]bool, len(currentIPs))
+				for _, ip := range currentIPs {
+					currentIPMap[ip] = true
+				}
+				_ = currentIPMap
+			}
+		})
+	}
+}
+
 // BenchmarkAddDeviceWithEviction tests performance when LRU eviction is triggered
 func BenchmarkAddDeviceWithEviction(b *testing.B) {
 	benchmarks := []struct {
@@ -102,6 +138,37 @@ func BenchmarkGet(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				ip := ips[i%len(ips)]
 				_, _ = mgr.Get(ip)
+			}
+		})
+	}
+}
+
+// BenchmarkGetIPMap tests the performance of directly retrieving IPs as a map
+func BenchmarkGetIPMap(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		deviceCount int
+	}{
+		{"GetIPMap_100devices", 100},
+		{"GetIPMap_1Kdevices", 1000},
+		{"GetIPMap_10Kdevices", 10000},
+		{"GetIPMap_20Kdevices", 20000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			mgr := NewManager(bm.deviceCount * 2)
+
+			// Populate with devices
+			for i := 0; i < bm.deviceCount; i++ {
+				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
+				mgr.AddDevice(ip)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				_ = mgr.GetIPMap()
 			}
 		})
 	}
