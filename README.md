@@ -49,7 +49,7 @@ Access the **InfluxDB UI** at `https://localhost` (User: `admin`, Pass: `admin12
 
 ---
 
-## 🛠️ Deployment Options
+## Deployment Options
 
 | Method | Best For | Description |
 |--------|----------|-------------|
