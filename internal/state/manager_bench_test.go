@@ -352,3 +352,71 @@ func BenchmarkConcurrentMixed(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkCurrentIPCheckApproach benchmarks the current way of getting IPs and creating a map
+func BenchmarkCurrentIPCheckApproach(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		deviceCount int
+	}{
+		{"Current_100devices", 100},
+		{"Current_1Kdevices", 1000},
+		{"Current_10Kdevices", 10000},
+		{"Current_20Kdevices", 20000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			mgr := NewManager(bm.deviceCount * 2)
+
+			// Populate with devices
+			for i := 0; i < bm.deviceCount; i++ {
+				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
+				mgr.AddDevice(ip)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				currentIPs := mgr.GetAllIPs()
+				currentIPMap := make(map[string]bool, len(currentIPs))
+				for _, ip := range currentIPs {
+					currentIPMap[ip] = true
+				}
+				_ = currentIPMap
+			}
+		})
+	}
+}
+
+// BenchmarkOptimizedIPCheckApproach benchmarks the optimized way of getting IPs using GetIPMap
+func BenchmarkOptimizedIPCheckApproach(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		deviceCount int
+	}{
+		{"Optimized_100devices", 100},
+		{"Optimized_1Kdevices", 1000},
+		{"Optimized_10Kdevices", 10000},
+		{"Optimized_20Kdevices", 20000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			mgr := NewManager(bm.deviceCount * 2)
+
+			// Populate with devices
+			for i := 0; i < bm.deviceCount; i++ {
+				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
+				mgr.AddDevice(ip)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				currentIPMap := mgr.GetIPMap()
+				_ = currentIPMap
+			}
+		})
+	}
+}

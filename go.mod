@@ -1,6 +1,6 @@
 module github.com/kljama/netscan
 
-go 1.26
+go 1.24
 
 require (
 	github.com/gosnmp/gosnmp v1.42.1

@@ -252,6 +252,17 @@ func (m *Manager) GetAllIPs() []string {
 	return ips
 }
 
+// GetIPMap returns a map of all managed device IP addresses for efficient existence checks
+func (m *Manager) GetIPMap() map[string]bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ipMap := make(map[string]bool, len(m.devices))
+	for ip := range m.devices {
+		ipMap[ip] = true
+	}
+	return ipMap
+}
+
 // Prune removes devices not seen within the specified duration
 // Removes devices from both the map and heap
 func (m *Manager) Prune(olderThan time.Duration) []Device {

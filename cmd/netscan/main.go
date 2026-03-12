@@ -389,13 +389,8 @@ func main() {
 			// Pinger Reconciliation: Ensure all devices have pingers
 			pingersMu.Lock()
 
-			// Get current state IPs
-			currentIPs := stateMgr.GetAllIPs()
-			// Pre-allocate map with exact capacity to avoid reallocation (performance optimization)
-			currentIPMap := make(map[string]bool, len(currentIPs))
-			for _, ip := range currentIPs {
-				currentIPMap[ip] = true
-			}
+			// Get current state IPs as a map for efficient existence checks (performance optimization)
+			currentIPMap := stateMgr.GetIPMap()
 
 			// Start pingers for new devices
 			// CRITICAL: Check both activePingers AND stoppingPingers to prevent race condition
@@ -474,13 +469,8 @@ func main() {
 			// SNMP Poller Reconciliation: Ensure all devices have SNMP pollers
 			snmpPollersMu.Lock()
 
-			// Get current state IPs
-			currentIPs := stateMgr.GetAllIPs()
-			// Pre-allocate map with exact capacity to avoid reallocation (performance optimization)
-			currentIPMap := make(map[string]bool, len(currentIPs))
-			for _, ip := range currentIPs {
-				currentIPMap[ip] = true
-			}
+			// Get current state IPs as a map for efficient existence checks (performance optimization)
+			currentIPMap := stateMgr.GetIPMap()
 
 			// Start SNMP pollers for new devices
 			// CRITICAL: Check both activeSNMPPollers AND stoppingSNMPPollers to prevent race condition
