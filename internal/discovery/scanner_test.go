@@ -2,8 +2,9 @@ package discovery
 
 import (
 	"context"
+	crand "crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"net"
 	"testing"
 	"time"
@@ -263,9 +264,13 @@ func TestIPShufflingBehavior(t *testing.T) {
 	shuffled := make([]string, len(sequential))
 	copy(shuffled, sequential)
 
-	rand.Shuffle(len(shuffled), func(i, j int) {
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	})
+	for i := len(shuffled) - 1; i > 0; i-- {
+		n, err := crand.Int(crand.Reader, big.NewInt(int64(i+1)))
+		if err == nil {
+			j := int(n.Int64())
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		}
+	}
 
 	// Verify that at least some elements are in different positions
 	// (checking all would fail if shuffle happened to keep some in place)

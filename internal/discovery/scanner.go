@@ -2,8 +2,9 @@ package discovery
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/binary"
-	"math/rand"
+	"math/big"
 	"net"
 	"sync"
 	"time"
@@ -108,9 +109,13 @@ func RunICMPSweep(ctx context.Context, networks []string, workers int, limiter *
 		// Shuffle networks to randomize which network we scan first
 		shuffledNetworks := make([]string, len(networks))
 		copy(shuffledNetworks, networks)
-		rand.Shuffle(len(shuffledNetworks), func(i, j int) {
-			shuffledNetworks[i], shuffledNetworks[j] = shuffledNetworks[j], shuffledNetworks[i]
-		})
+		for i := len(shuffledNetworks) - 1; i > 0; i-- {
+			n, err := crand.Int(crand.Reader, big.NewInt(int64(i+1)))
+			if err == nil {
+				j := int(n.Int64())
+				shuffledNetworks[i], shuffledNetworks[j] = shuffledNetworks[j], shuffledNetworks[i]
+			}
+		}
 
 		for _, network := range shuffledNetworks {
 			// Check context
@@ -793,6 +798,17 @@ func incIP(ip net.IP) {
 	}
 }
 
+// secureRandUint64 safely generates a uint64 using crypto/rand
+func secureRandUint64() uint64 {
+	var b [8]byte
+	_, err := crand.Read(b[:])
+	if err != nil {
+		// Fallback to time-based generation if crypto/rand fails
+		return uint64(time.Now().UnixNano())
+	}
+	return binary.BigEndian.Uint64(b[:])
+}
+
 // streamRandomizedNetwork generates IPs from a CIDR using a Linear Congruential Generator (LCG)
 // to iterate through the address space in a pseudo-random order without buffering.
 func streamRandomizedNetwork(ctx context.Context, cidr string, out chan<- string) {
@@ -815,13 +831,13 @@ func streamRandomizedNetwork(ctx context.Context, cidr string, out chan<- string
 	size := uint64(1) << hostBits
 	mask := size - 1
 
-	// Generate LCG parameters
+	// Generate LCG parameters securely
 	// a must satisfy: a % 4 == 1
 	// c must be odd
-	a := (rand.Uint64() * 4) + 1
-	c := rand.Uint64() | 1
+	a := (secureRandUint64() * 4) + 1
+	c := secureRandUint64() | 1
 
-	current := rand.Uint64() & mask
+	current := secureRandUint64() & mask
 
 	// Prepare network address as uint32
 	networkIP := ipToUint32(ipnet.IP)
