@@ -12,7 +12,7 @@
 *   **Real-Time Monitoring**
 *   **Optional SNMP Enrichment**
 *   **InfluxDB Integration**: Native support for InfluxDB v2, separating operational metrics from health telemetry.
-*   **Secure Deployment**: Supports rootless execution via capability-based security (`CAP_NET_RAW`).
+*   **Secure Deployment**: Native systemd installation supports rootless execution via capability-based security (`CAP_NET_RAW`), while Docker orchestration simplifies local evaluation.
 
 ---
 
