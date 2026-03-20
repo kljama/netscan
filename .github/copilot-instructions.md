@@ -38,7 +38,7 @@ These are the foundational rules of the project. **Strict adherence is required.
 
 ### 4. Security
 *   **Sanitization**: Sanitize all external data (SNMP strings, hostnames) before writing to InfluxDB.
-*   **Least Privilege**: The Docker container uses `root` *only* for `CAP_NET_RAW` (ICMP). All other operations must be root-safe.
+*   **Least Privilege**: The Docker container must run entirely as `root` for `CAP_NET_RAW` (ICMP) access, due to restrictions on raw sockets for non-root users in container environments.
 *   **Credential Safety**: Never log secrets. Use environment variable expansion (`${VAR}`) for configuration values.
 
 ---
@@ -52,14 +52,14 @@ These are the foundational rules of the project. **Strict adherence is required.
 
 **Key Stats**:
 *   **Capacity**: 20,000+ concurrent devices.
-*   **Architecture**: Multi-ticker event loop with 6 independent workflows.
+*   **Architecture**: Multi-ticker event loop with 5 independent workflows, plus an autonomous InfluxDB batching workflow.
 *   **Storage**: In-memory state (StateManager) + InfluxDB (Metrics).
 
 ---
 
 ## Core Architecture
 
-The application runs a single event loop in `main.go` managing six concurrent tickers.
+The application runs a single event loop in `main.go` managing five concurrent tickers, while the InfluxDB `Writer` manages its own internal background flushing ticker.
 
 ### 1. ICMP Discovery Workflow
 *   **Role**: Finds new devices.
