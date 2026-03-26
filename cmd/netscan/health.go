@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kljama/netscan/internal/influx"
@@ -24,6 +25,7 @@ type HealthServer struct {
 	port              int
 	getPingerCount    func() int
 	getPingsSentCount func() uint64
+	rssMB             atomic.Uint64
 }
 
 // HealthResponse represents the health check JSON response
@@ -47,7 +49,7 @@ type HealthResponse struct {
 
 // NewHealthServer creates a new health check server
 func NewHealthServer(port int, stateMgr *state.Manager, writer *influx.Writer, getPingerCount func() int, getPingsSentCount func() uint64) *HealthServer {
-	return &HealthServer{
+	hs := &HealthServer{
 		stateMgr:          stateMgr,
 		writer:            writer,
 		startTime:         time.Now(),
@@ -55,6 +57,9 @@ func NewHealthServer(port int, stateMgr *state.Manager, writer *influx.Writer, g
 		getPingerCount:    getPingerCount,
 		getPingsSentCount: getPingsSentCount,
 	}
+	// Initial RSS reading
+	hs.rssMB.Store(getRSSMB())
+	return hs
 }
 
 // Start begins serving health checks (non-blocking)
@@ -76,6 +81,25 @@ func (hs *HealthServer) Start() error {
 
 		if err := http.ListenAndServe(addr, nil); err != nil {
 			log.Error().Err(err).Msg("Health server error")
+		}
+	}()
+
+	// Background RSS updater (every 10 seconds)
+	go func() {
+		// Panic recovery for RSS updater goroutine
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().
+					Interface("panic", r).
+					Msg("RSS updater panic recovered")
+			}
+		}()
+
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			hs.rssMB.Store(getRSSMB())
 		}
 	}()
 
@@ -101,8 +125,8 @@ func (hs *HealthServer) GetHealthMetrics() HealthResponse {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
-	// Get OS-level RSS (Linux /proc)
-	rssMB := getRSSMB()
+	// Get OS-level RSS (cached value)
+	rssMB := hs.rssMB.Load()
 
 	// Determine overall status
 	influxOK := hs.writer.HealthCheck() == nil
