@@ -16,11 +16,11 @@ RUN go mod download
 COPY . .
 
 # Version build argument
-ARG VERSION=dev
+ARG VERSION=1.0.0
 
 # Build the binary with optimizations for linux/amd64
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags="-w -s -X main.Version=${VERSION}" \
+    -ldflags="-w -s -X github.com/kljama/netscan/internal/version.Version=${VERSION}" \
     -o netscan \
     ./cmd/netscan
 

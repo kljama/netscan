@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
@@ -17,18 +18,25 @@ import (
 	"github.com/kljama/netscan/internal/logger"
 	"github.com/kljama/netscan/internal/monitoring"
 	"github.com/kljama/netscan/internal/state"
+	"github.com/kljama/netscan/internal/version"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/time/rate"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yml", "Path to configuration file")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("netscan version %s\n", version.Version)
+		return
+	}
 
 	// Initialize structured logging
 	logger.Setup(false) // Set to true for debug mode
 
-	log.Info().Msg("netscan starting up...")
+	log.Info().Str("version", version.Version).Msg("netscan starting up...")
 	cfg, err := config.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("failed to load config")

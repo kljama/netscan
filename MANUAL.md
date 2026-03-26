@@ -1388,7 +1388,7 @@ netscan exposes HTTP health check endpoints for monitoring, container orchestrat
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | string | Overall service health: `"healthy"` (all systems operational), `"degraded"` (InfluxDB unreachable but monitoring continues), or `"unhealthy"` (critical failure) |
-| `version` | string | Application version string (currently hardcoded `"1.0.0"`, TODO: inject at build time) |
+| `version` | string | Application version string (injected at build time via ldflags) |
 | `uptime` | string | Human-readable time since service started (e.g., `"2h15m30s"`) |
 | `device_count` | int | Total number of devices currently managed by StateManager |
 | `snmp_suspended_devices` | int | Number of devices currently suspended by SNMP circuit breaker |

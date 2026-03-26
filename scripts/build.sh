@@ -12,7 +12,7 @@ BINARY=netscan
 cd "$PROJECT_ROOT"
 
 # Determine version
-VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "1.0.0")
 echo "Building version: $VERSION"
 
 # Build the binary
@@ -22,6 +22,6 @@ if [ -f "$BINARY" ]; then
 fi
 
 echo "Building netscan..."
-go build -ldflags "-X main.Version=$VERSION" -o $BINARY ./cmd/netscan
+go build -ldflags "-X github.com/kljama/netscan/internal/version.Version=$VERSION" -o $BINARY ./cmd/netscan
 
 echo "Build complete: $BINARY"

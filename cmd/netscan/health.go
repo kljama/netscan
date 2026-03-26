@@ -13,6 +13,7 @@ import (
 
 	"github.com/kljama/netscan/internal/influx"
 	"github.com/kljama/netscan/internal/state"
+	"github.com/kljama/netscan/internal/version"
 	"github.com/rs/zerolog/log"
 )
 
@@ -113,7 +114,7 @@ func (hs *HealthServer) GetHealthMetrics() HealthResponse {
 
 	return HealthResponse{
 		Status:               status,
-		Version:              Version,
+		Version:              version.Version,
 		Uptime:               time.Since(hs.startTime).String(),
 		DeviceCount:          hs.stateMgr.Count(),
 		SNMPSuspendedDevices: hs.stateMgr.GetSNMPSuspendedCount(),

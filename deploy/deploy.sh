@@ -64,10 +64,10 @@ build_binary() {
     
     # Get version info
     local version
-    version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+    version=$(git describe --tags --always --dirty 2>/dev/null || echo "1.0.0")
     log_info "Building version: $version"
 
-    if ! go build -ldflags "-X main.Version=$version" -o "$BINARY" ./cmd/netscan; then
+    if ! go build -ldflags "-X github.com/kljama/netscan/internal/version.Version=$version" -o "$BINARY" ./cmd/netscan; then
         error_exit "Failed to build netscan binary"
     fi
 

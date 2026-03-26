@@ -1,4 +1,4 @@
-package main
+package version
 
 // Version is the application version.
 // It is set at build time using -ldflags.
