@@ -1,0 +1,64 @@
+name: Docker Compose Test
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+  docker-compose-test:
+    name: Test Docker Compose Setup
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create config.yml from template
+      run: |
+        cp config.yml.example config.yml
+        echo "Config file created - environment variables will be expanded by docker-compose"
+
+    - name: Build and start Docker Compose stack
+      run: |
+        docker compose build
+        docker compose up -d
+
+    - name: Wait for services to be healthy
+      run: |
+        echo "Waiting for services to start..."
+        timeout 60 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 2; done' || true
+        docker compose ps
+
+    - name: Check netscan logs
+      run: |
+        echo "Checking netscan logs..."
+        docker compose logs netscan || true
+
+    - name: Check InfluxDB logs
+      run: |
+        echo "Checking InfluxDB logs..."
+        docker compose logs influxdb || true
+
+    - name: Verify netscan is running
+      run: |
+        docker compose ps netscan
+        if docker compose ps netscan | grep -q "Up"; then
+          echo "✓ netscan service is running"
+        else
+          echo "✗ netscan service is not running"
+          echo "Showing last 50 lines of netscan logs:"
+          docker compose logs --tail=50 netscan
+          exit 1
+        fi
+
+    - name: Stop Docker Compose stack
+      if: always()
+      run: |
+        docker compose down -v

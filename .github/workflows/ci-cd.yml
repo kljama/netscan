@@ -1,0 +1,223 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.26'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: |
+        # Run tests without coverage first to ensure they pass
+        go test -v -race ./...
+        
+        # Generate coverage profile, excluding cmd package which has no tests
+        go test -race -covermode=atomic -coverprofile=coverage.out ./internal/...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+      continue-on-error: true
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.26'
+
+    - name: Run govulncheck
+      run: |
+        go install golang.org/x/vuln/cmd/govulncheck@latest
+        govulncheck ./...
+
+    - name: Run Trivy vulnerability scanner (filesystem)
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Build Docker image for scanning
+      run: |
+        docker build -t netscan:latest .
+
+    - name: Scan Docker image with Trivy
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'netscan:latest'
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'
+
+  build:
+    name: Build
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.26'
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build binary
+      run: |
+        go build -ldflags "-X main.version=${GITHUB_SHA::8}" -o netscan ./cmd/netscan
+        chmod +x netscan
+
+    - name: Test binary
+      run: ./netscan --help
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: netscan-linux-amd64
+        path: netscan
+        retention-days: 30
+
+  release:
+    name: Create Release
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update Changelog
+      uses: orhun/git-cliff-action@v4
+      id: git-cliff
+      with:
+        configuration: cliff.toml
+        args: --verbose --latest --strip header
+      env:
+        GITHUB_REPO: ${{ github.repository }}
+
+    - name: Update CHANGELOG.md
+      run: |
+        # Create cliff.toml configuration if it doesn't exist
+        if [ ! -f cliff.toml ]; then
+          cat > cliff.toml << 'EOF'
+        [changelog]
+        header = ""
+        body = """
+        ## [{{ version | trim_start_matches(pat="v") }}] - {{ date | date(format="%Y-%m-%d") }}
+
+        {% for group, commits in commits | group_by(attribute="group") %}
+        ### {{ group | upper_first }}
+        {% for commit in commits %}
+        - {% if commit.scope %}**{{commit.scope}}**: {% endif %}{{ commit.message | upper_first }}
+        {% endfor %}
+        {% endfor %}
+        """
+        trim = true
+
+        [git]
+        conventional_commits = true
+        filter_unconventional = true
+        split_commits = false
+        commit_parsers = [
+            { message = "^feat", group = "Added"},
+            { message = "^fix", group = "Fixed"},
+            { message = "^doc", group = "Documentation"},
+            { message = "^perf", group = "Performance"},
+            { message = "^refactor", group = "Changed"},
+            { message = "^style", group = "Style"},
+            { message = "^test", group = "Testing"},
+            { message = "^chore\\(release\\): prepare for", skip = true},
+            { message = "^chore", group = "Changed"},
+        ]
+        tag_pattern = "v[0-9]*"
+        ignore_tags = ""
+        EOF
+        fi
+
+        # Generate new changelog content
+        git cliff --unreleased --strip header --prepend CHANGELOG.md > CHANGELOG.tmp
+        mv CHANGELOG.tmp CHANGELOG.md
+
+    - name: Commit and push changelog
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add CHANGELOG.md
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "chore(release): update changelog for ${GITHUB_REF#refs/tags/}"
+          git push
+        fi
+
+    - name: Download build artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: netscan-linux-amd64
+        path: artifacts/
+
+    - name: Create release archive
+      run: |
+        cd artifacts
+        tar -czf ../netscan-linux-amd64.tar.gz *
+        cd ..
+        ls -la *.tar.gz
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          netscan-linux-amd64.tar.gz
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
