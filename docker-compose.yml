@@ -1,4 +1,38 @@
 services:
+
+  # InfluxDB service for metrics storage
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdbv2
+    restart: unless-stopped
+    # Port 8086 exposed to host for internal service communication
+    # The netscan service uses network_mode: host and needs to connect via localhost:8086
+    # For external browser access, use the nginx proxy at https://localhost (port 443)
+    ports:
+      - "127.0.0.1:8086:8086"  # Bind to localhost only for security
+    
+    # InfluxDB initialization environment variables
+    # Docker Compose automatically loads .env file from project directory if it exists
+    # If .env doesn't exist, defaults below are used
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=${DOCKER_INFLUXDB_INIT_MODE:-setup}
+      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD:-admin123}
+      - DOCKER_INFLUXDB_INIT_ORG=${DOCKER_INFLUXDB_INIT_ORG:-test-org}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET:-netscan}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${DOCKER_INFLUXDB_INIT_RETENTION:-1w}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN:-netscan-token}
+    volumes:
+      - influxdbv2-data:/var/lib/influxdb2
+      - ./scripts/init-influxdb.sh:/docker-entrypoint-initdb.d/init-influxdb.sh:ro
+      - ./influxdb/templates:/templates:ro
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+  
   # netscan service - network monitoring application
   netscan:
     build:
@@ -55,38 +89,6 @@ services:
     depends_on:
       influxdb:
         condition: service_healthy
-
-  # InfluxDB service for metrics storage
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdbv2
-    # Port 8086 exposed to host for internal service communication
-    # The netscan service uses network_mode: host and needs to connect via localhost:8086
-    # For external browser access, use the nginx proxy at https://localhost (port 443)
-    ports:
-      - "127.0.0.1:8086:8086"  # Bind to localhost only for security
-    
-    # InfluxDB initialization environment variables
-    # Docker Compose automatically loads .env file from project directory if it exists
-    # If .env doesn't exist, defaults below are used
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=${DOCKER_INFLUXDB_INIT_MODE:-setup}
-      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME:-admin}
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD:-admin123}
-      - DOCKER_INFLUXDB_INIT_ORG=${DOCKER_INFLUXDB_INIT_ORG:-test-org}
-      - DOCKER_INFLUXDB_INIT_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET:-netscan}
-      - DOCKER_INFLUXDB_INIT_RETENTION=${DOCKER_INFLUXDB_INIT_RETENTION:-1w}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN:-netscan-token}
-    volumes:
-      - influxdbv2-data:/var/lib/influxdb2
-      - ./scripts/init-influxdb.sh:/docker-entrypoint-initdb.d/init-influxdb.sh:ro
-      - ./influxdb/templates:/templates:ro
-    healthcheck:
-      test: ["CMD", "influx", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # Nginx reverse proxy for secure HTTPS access to InfluxDB UI
   nginx:
