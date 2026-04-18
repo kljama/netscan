@@ -34,7 +34,7 @@ These are the foundational rules of the project. **Strict adherence is required.
 *   **Interface-Driven**: Use interfaces (`PingWriter`, `StateManager`) to decouple components and enable testing.
 *   **Worker Pools**: Use buffered channels and fixed-size worker pools for all batch operations (discovery, scanning).
 *   **Rate Limiting**: Respect global rate limits (`x/time/rate`) for all network egress (ICMP and SNMP).
-*   **Circuit Breakers**: Check circuit breaker status *before* attempting network operations. suspend specific devices upon repeated failures.
+*   **Circuit Breakers**: Check circuit breaker status *before* attempting SNMP network operations. Suspend specific devices upon repeated failures (Note: Ping circuit breakers were removed).
 
 ### 4. Security
 *   **Sanitization**: Sanitize all external data (SNMP strings, hostnames) before writing to InfluxDB.
@@ -116,7 +116,7 @@ The application runs a single event loop in `main.go` managing five concurrent t
 ### State Manager (`internal/state`)
 *   **Structure**: In-memory map protected by RWMutex.
 *   **Eviction**: Min-Heap implementation for O(log n) LRU eviction when capacity is reached.
-*   **Circuit Breakers**: Tracks `ConsecutiveFails` and expiration times for Ping/SNMP suspensions.
+*   **Circuit Breakers**: Tracks `ConsecutiveFails` and expiration times for SNMP suspensions.
 
 ### InfluxDB Writer (`internal/influx`)
 *   **Dual-Path**: Separate APIs for Business Metrics (`ping`, `device_info`) vs Health Metrics.
@@ -128,8 +128,8 @@ The application runs a single event loop in `main.go` managing five concurrent t
 *   **SNMP**: Fallback logic (`Get` -> `GetNext`) to handle varied device support.
 
 ### Monitoring (`internal/monitoring`)
-*   **Pinger**: Dedicated goroutine per device. Check Circuit Breaker -> Wait Rate Limit -> Ping -> Update State -> Write Metric.
-*   **SNMP Poller**: Dedicated goroutine per device. Similar flow to Pinger.
+*   **Pinger**: Dedicated goroutine per device. Wait Rate Limit -> Ping -> Update State -> Write Metric.
+*   **SNMP Poller**: Dedicated goroutine per device. Check Circuit Breaker -> Wait Rate Limit -> Query -> Update State -> Write Metric.
 
 ---
 
