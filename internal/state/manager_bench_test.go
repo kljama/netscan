@@ -419,3 +419,34 @@ func BenchmarkConcurrentMixed(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkGetAll tests the performance of retrieving all devices
+func BenchmarkGetAll(b *testing.B) {
+	benchmarks := []struct {
+		name        string
+		deviceCount int
+	}{
+		{"GetAll_100devices", 100},
+		{"GetAll_1Kdevices", 1000},
+		{"GetAll_10Kdevices", 10000},
+		{"GetAll_20Kdevices", 20000},
+	}
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			mgr := NewManager(bm.deviceCount * 2)
+
+			// Populate with devices
+			for i := 0; i < bm.deviceCount; i++ {
+				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
+				mgr.AddDevice(ip)
+			}
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				_ = mgr.GetAll()
+			}
+		})
+	}
+}

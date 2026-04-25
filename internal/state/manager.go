@@ -204,9 +204,11 @@ func (m *Manager) Get(ip string) (*Device, bool) {
 func (m *Manager) GetAll() []Device {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	result := make([]Device, 0, len(m.devices))
+	result := make([]Device, len(m.devices))
+	i := 0
 	for _, dev := range m.devices {
-		result = append(result, *dev)
+		result[i] = *dev
+		i++
 	}
 	return result
 }
@@ -245,9 +247,11 @@ func (m *Manager) UpdateDeviceSNMP(ip, hostname, sysDescr string) {
 func (m *Manager) GetAllIPs() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	ips := make([]string, 0, len(m.devices))
+	ips := make([]string, len(m.devices))
+	i := 0
 	for ip := range m.devices {
-		ips = append(ips, ip)
+		ips[i] = ip
+		i++
 	}
 	return ips
 }
