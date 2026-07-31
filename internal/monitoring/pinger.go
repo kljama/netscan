@@ -2,7 +2,9 @@ package monitoring
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"net"
 	"strings"
 	"sync"
@@ -51,8 +53,22 @@ func StartPinger(ctx context.Context, wg *sync.WaitGroup, device state.Device, i
 		pingOp = performPing
 	}
 
-	// Initialize timer for first ping with 1 second delay to avoid immediate ping storm
-	timer := time.NewTimer(1 * time.Second)
+	// Initialize timer for first ping with jitter to avoid immediate ping storm
+	// Jitter is random between 0 and interval to spread out initial bursts
+	initialDelay := 1 * time.Second
+	if interval > 0 {
+		val, err := rand.Int(rand.Reader, big.NewInt(int64(interval)))
+		if err == nil {
+			initialDelay = time.Duration(val.Int64())
+		} else {
+			log.Warn().
+				Str("ip", device.IP).
+				Err(err).
+				Msg("Failed to generate random initial delay, using default 1s fallback")
+		}
+	}
+
+	timer := time.NewTimer(initialDelay)
 	defer timer.Stop()
 
 	for {
