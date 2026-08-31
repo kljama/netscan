@@ -26,3 +26,55 @@ func TestManagerAddGetPrune(t *testing.T) {
 		t.Errorf("expected device to be removed after prune")
 	}
 }
+
+func TestManagerForEachIPAndHas(t *testing.T) {
+	mgr := NewManager(1000)
+	ips := []string{"192.168.1.1", "192.168.1.2", "10.0.0.1"}
+
+	for _, ip := range ips {
+		mgr.AddDevice(ip)
+	}
+
+	// Test Has
+	for _, ip := range ips {
+		if !mgr.Has(ip) {
+			t.Errorf("expected Has(%s) to be true", ip)
+		}
+	}
+
+	if mgr.Has("172.16.0.1") {
+		t.Errorf("expected Has(172.16.0.1) to be false")
+	}
+
+	// Test ForEachIP
+	visited := make(map[string]bool)
+	mgr.ForEachIP(func(ip string) {
+		visited[ip] = true
+	})
+
+	if len(visited) != len(ips) {
+		t.Errorf("expected %d visited IPs, got %d", len(ips), len(visited))
+	}
+
+	for _, ip := range ips {
+		if !visited[ip] {
+			t.Errorf("expected ForEachIP to visit %s", ip)
+		}
+	}
+
+	// Test ForEachDevice (verifying metadata preservation)
+	mgr.UpdateDeviceSNMP("192.168.1.1", "router1", "Cisco IOS")
+	visitedDevs := make(map[string]Device)
+	mgr.ForEachDevice(func(dev Device) {
+		visitedDevs[dev.IP] = dev
+	})
+
+	if len(visitedDevs) != len(ips) {
+		t.Errorf("expected %d visited Devices, got %d", len(ips), len(visitedDevs))
+	}
+
+	dev1, ok := visitedDevs["192.168.1.1"]
+	if !ok || dev1.Hostname != "router1" || dev1.SysDescr != "Cisco IOS" {
+		t.Errorf("expected device metadata preserved, got %+v", dev1)
+	}
+}

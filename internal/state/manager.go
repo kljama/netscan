@@ -256,19 +256,36 @@ func (m *Manager) GetAllIPs() []string {
 	return ips
 }
 
-// GetIPMap returns a map of all managed device IP addresses
-// This provides O(1) existence checks without allocating an intermediate slice
-func (m *Manager) GetIPMap() map[string]bool {
+// ForEachIP executes a callback function for every managed device IP address.
+// Iteration holds a read lock on the state manager, ensuring thread safety
+// without allocating intermediate collections.
+func (m *Manager) ForEachIP(fn func(ip string)) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	// Pre-allocate map with exact capacity
-	ips := make(map[string]bool, len(m.devices))
 	for ip := range m.devices {
-		ips[ip] = true
+		fn(ip)
 	}
+}
 
-	return ips
+// ForEachDevice executes a callback function with a copy of each managed device.
+// Iteration holds a read lock on the state manager, ensuring thread safety
+// and preserving device metadata without allocating intermediate collections.
+func (m *Manager) ForEachDevice(fn func(dev Device)) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, dev := range m.devices {
+		if dev != nil {
+			fn(*dev)
+		}
+	}
+}
+
+// Has returns true if the specified IP address exists in the managed state.
+func (m *Manager) Has(ip string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.devices[ip]
+	return exists
 }
 
 // Prune removes devices not seen within the specified duration
