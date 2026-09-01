@@ -26,3 +26,34 @@ func TestManagerAddGetPrune(t *testing.T) {
 		t.Errorf("expected device to be removed after prune")
 	}
 }
+
+func TestManagerForEachIPAndHas(t *testing.T) {
+	mgr := NewManager(1000)
+	ips := []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	for _, ip := range ips {
+		mgr.AddDevice(ip)
+	}
+
+	for _, ip := range ips {
+		if !mgr.Has(ip) {
+			t.Errorf("expected mgr.Has(%s) to be true", ip)
+		}
+	}
+	if mgr.Has("10.0.0.99") {
+		t.Errorf("expected mgr.Has('10.0.0.99') to be false")
+	}
+
+	visited := make(map[string]bool)
+	mgr.ForEachIP(func(ip string) {
+		visited[ip] = true
+	})
+
+	if len(visited) != len(ips) {
+		t.Errorf("expected %d visited IPs, got %d", len(ips), len(visited))
+	}
+	for _, ip := range ips {
+		if !visited[ip] {
+			t.Errorf("expected IP %s to be visited", ip)
+		}
+	}
+}
