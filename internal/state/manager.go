@@ -271,25 +271,6 @@ func (m *Manager) GetIPMap() map[string]bool {
 	return ips
 }
 
-// ForEachIP executes a callback function for every managed device IP address.
-// Iterates directly under RLock without allocating memory.
-func (m *Manager) ForEachIP(fn func(ip string)) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for ip := range m.devices {
-		fn(ip)
-	}
-}
-
-// Has checks if a device with the given IP exists in state management.
-// Performs an O(1) lookup under RLock without memory allocations.
-func (m *Manager) Has(ip string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	_, exists := m.devices[ip]
-	return exists
-}
-
 // Prune removes devices not seen within the specified duration
 // Removes devices from both the map and heap
 func (m *Manager) Prune(olderThan time.Duration) []Device {

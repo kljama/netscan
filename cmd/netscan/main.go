@@ -397,9 +397,12 @@ func main() {
 			// Pinger Reconciliation: Ensure all devices have pingers
 			pingersMu.Lock()
 
-			// Start pingers for new devices without map allocations
+			// Get current state IPs as a map for O(1) lookups
+			currentIPMap := stateMgr.GetIPMap()
+
+			// Start pingers for new devices
 			// CRITICAL: Check both activePingers AND stoppingPingers to prevent race condition
-			stateMgr.ForEachIP(func(ip string) {
+			for ip := range currentIPMap {
 				_, isActive := activePingers[ip]
 				_, isStopping := stoppingPingers[ip]
 
@@ -410,7 +413,7 @@ func main() {
 							Int("max_pingers", cfg.MaxConcurrentPingers).
 							Str("ip", ip).
 							Msg("Maximum concurrent pingers reached, skipping device")
-						return
+						continue
 					}
 					log.Debug().Str("ip", ip).Msg("Starting continuous pinger")
 					pingerCtx, pingerCancel := context.WithCancel(mainCtx)
@@ -451,12 +454,12 @@ func main() {
 						Str("ip", ip).
 						Msg("Pinger is stopping, will start new one after exit completes")
 				}
-			})
+			}
 
 			// Stop pingers for removed devices
 			// CRITICAL: Move to stoppingPingers first, then call cancelFunc
 			for ip, cancelFunc := range activePingers {
-				if !stateMgr.Has(ip) {
+				if !currentIPMap[ip] {
 					log.Debug().Str("ip", ip).Msg("Stopping continuous pinger for stale device")
 
 					// Move to stoppingPingers BEFORE calling cancelFunc
@@ -474,9 +477,12 @@ func main() {
 			// SNMP Poller Reconciliation: Ensure all devices have SNMP pollers
 			snmpPollersMu.Lock()
 
-			// Start SNMP pollers for new devices without map allocations
+			// Get current state IPs as a map for O(1) lookups
+			currentIPMap := stateMgr.GetIPMap()
+
+			// Start SNMP pollers for new devices
 			// CRITICAL: Check both activeSNMPPollers AND stoppingSNMPPollers to prevent race condition
-			stateMgr.ForEachIP(func(ip string) {
+			for ip := range currentIPMap {
 				_, isActive := activeSNMPPollers[ip]
 				_, isStopping := stoppingSNMPPollers[ip]
 
@@ -487,7 +493,7 @@ func main() {
 							Int("max_snmp_pollers", cfg.MaxConcurrentSNMPPollers).
 							Str("ip", ip).
 							Msg("Maximum concurrent SNMP pollers reached, skipping device")
-						return
+						continue
 					}
 					log.Debug().Str("ip", ip).Msg("Starting continuous SNMP poller")
 					snmpPollerCtx, snmpPollerCancel := context.WithCancel(mainCtx)
@@ -528,12 +534,12 @@ func main() {
 						Str("ip", ip).
 						Msg("SNMP poller is stopping, will start new one after exit completes")
 				}
-			})
+			}
 
 			// Stop SNMP pollers for removed devices
 			// CRITICAL: Move to stoppingSNMPPollers first, then call cancelFunc
 			for ip, cancelFunc := range activeSNMPPollers {
-				if !stateMgr.Has(ip) {
+				if !currentIPMap[ip] {
 					log.Debug().Str("ip", ip).Msg("Stopping continuous SNMP poller for stale device")
 
 					// Move to stoppingSNMPPollers BEFORE calling cancelFunc

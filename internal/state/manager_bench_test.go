@@ -40,39 +40,6 @@ func BenchmarkAddDevice(b *testing.B) {
 	}
 }
 
-// BenchmarkForEachIP tests the zero-allocation iteration over managed IPs
-func BenchmarkForEachIP(b *testing.B) {
-	benchmarks := []struct {
-		name        string
-		deviceCount int
-	}{
-		{"ForEachIP_100devices", 100},
-		{"ForEachIP_1Kdevices", 1000},
-		{"ForEachIP_10Kdevices", 10000},
-		{"ForEachIP_20Kdevices", 20000},
-	}
-
-	for _, bm := range benchmarks {
-		b.Run(bm.name, func(b *testing.B) {
-			mgr := NewManager(bm.deviceCount * 2)
-
-			// Populate with devices
-			for i := 0; i < bm.deviceCount; i++ {
-				ip := fmt.Sprintf("192.168.%d.%d", i/256, i%256)
-				mgr.AddDevice(ip)
-			}
-
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				mgr.ForEachIP(func(ip string) {
-					_ = ip
-				})
-			}
-		})
-	}
-}
-
 // BenchmarkGetAllIPsWithMapConversion simulates the existing usage in main.go
 func BenchmarkGetAllIPsWithMapConversion(b *testing.B) {
 	benchmarks := []struct {
