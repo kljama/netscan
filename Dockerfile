@@ -27,9 +27,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 # Stage 2: Create minimal runtime image
 FROM alpine:latest
 
-# Install runtime dependencies (including wget for healthcheck)
+# Install runtime dependencies (including wget for healthcheck) and upgrade packages for security patches
 RUN apk add --no-cache ca-certificates libcap wget \
-    && apk upgrade --no-cache zlib
+    && apk upgrade --no-cache
 
 # Create non-root user for running the service
 RUN addgroup -S netscan && adduser -S netscan -G netscan
