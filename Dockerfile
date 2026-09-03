@@ -29,7 +29,7 @@ FROM alpine:latest
 
 # Install runtime dependencies (including wget for healthcheck)
 RUN apk add --no-cache ca-certificates libcap wget \
-    && apk upgrade --no-cache zlib
+    && apk upgrade --no-cache zlib openssl
 
 # Create non-root user for running the service
 RUN addgroup -S netscan && adduser -S netscan -G netscan
