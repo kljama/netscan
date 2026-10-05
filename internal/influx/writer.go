@@ -196,15 +196,11 @@ func (w *Writer) WriteDeviceInfo(ip, hostname, sysDescr string) error {
 	hostname = sanitizeInfluxString(hostname, "hostname")
 	sysDescr = sanitizeInfluxString(sysDescr, "sysDescr")
 
-	p := influxdb2.NewPoint(
-		"device_info",
-		map[string]string{"ip": ip},
-		map[string]interface{}{
-			"hostname":         hostname,
-			"snmp_description": sysDescr,
-		},
-		time.Now(),
-	)
+	p := influxdb2.NewPointWithMeasurement("device_info").
+		AddTag("ip", ip).
+		AddField("hostname", hostname).
+		AddField("snmp_description", sysDescr).
+		SetTime(time.Now())
 
 	w.addToBatch(p)
 	return nil
@@ -225,24 +221,19 @@ func (w *Writer) WriteHealthMetrics(deviceCount, pingerCount, goroutines, memMB,
 		Uint64("dropped_points", droppedPoints).
 		Msg("Writing health metrics to InfluxDB")
 
-	p := influxdb2.NewPoint(
-		"health_metrics",
-		map[string]string{},
-		map[string]interface{}{
-			"device_count":                deviceCount,
-			"active_pingers":              pingerCount,
-			"snmp_suspended_devices":      snmpSuspendedCount,
-			"goroutines":                  goroutines,
-			"memory_mb":                   memMB,
-			"rss_mb":                      rssMB,
-			"influxdb_ok":                 influxOK,
-			"influxdb_successful_batches": influxSuccess,
-			"influxdb_failed_batches":     influxFailed,
-			"influxdb_dropped_points":     droppedPoints,
-			"pings_sent_total":            pingsSentTotal,
-		},
-		time.Now(),
-	)
+	p := influxdb2.NewPointWithMeasurement("health_metrics").
+		AddField("device_count", deviceCount).
+		AddField("active_pingers", pingerCount).
+		AddField("snmp_suspended_devices", snmpSuspendedCount).
+		AddField("goroutines", goroutines).
+		AddField("memory_mb", memMB).
+		AddField("rss_mb", rssMB).
+		AddField("influxdb_ok", influxOK).
+		AddField("influxdb_successful_batches", influxSuccess).
+		AddField("influxdb_failed_batches", influxFailed).
+		AddField("influxdb_dropped_points", droppedPoints).
+		AddField("pings_sent_total", pingsSentTotal).
+		SetTime(time.Now())
 
 	// Write directly using healthWriteAPI (relies on InfluxDB client's internal batching)
 	w.healthWriteAPI.WritePoint(p)
@@ -260,15 +251,11 @@ func (w *Writer) WritePingResult(ip string, rtt time.Duration, successful bool) 
 		return fmt.Errorf("invalid RTT value: %v (too high, max 1 minute)", rtt)
 	}
 
-	p := influxdb2.NewPoint(
-		"ping",
-		map[string]string{"ip": ip},
-		map[string]interface{}{
-			"rtt_ms":  float64(rtt.Nanoseconds()) / 1e6,
-			"success": successful,
-		},
-		time.Now(),
-	)
+	p := influxdb2.NewPointWithMeasurement("ping").
+		AddTag("ip", ip).
+		AddField("rtt_ms", float64(rtt.Nanoseconds())/1e6).
+		AddField("success", successful).
+		SetTime(time.Now())
 
 	w.addToBatch(p)
 	return nil
