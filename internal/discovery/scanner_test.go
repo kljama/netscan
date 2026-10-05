@@ -287,3 +287,23 @@ func TestIPShufflingBehavior(t *testing.T) {
 		t.Errorf("Shuffle didn't randomize enough: only %d out of %d elements moved", differentCount, len(sequential))
 	}
 }
+
+func BenchmarkStreamIPsFromCIDR(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		ch := make(chan string, 256)
+		go func() {
+			for range ch {
+			}
+		}()
+		streamIPsFromCIDR("10.0.0.0/16", ch)
+		close(ch)
+	}
+}
+
+func BenchmarkIpsFromCIDR(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = ipsFromCIDR("10.0.0.0/16")
+	}
+}
