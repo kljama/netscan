@@ -707,11 +707,15 @@ func streamIPsFromCIDR(cidr string, ipChan chan<- string) {
 		maxIPs = 65536 // Safety limit
 	}
 
+	var nextIP net.IP
+	if skipNetworkAndBroadcast {
+		nextIP = make(net.IP, len(ip))
+	}
+
 	for ipnet.Contains(ip) && count < maxIPs {
 		// For networks with network/broadcast addresses, stop before broadcast address
 		if skipNetworkAndBroadcast {
 			// Calculate broadcast address by checking if next IP would be outside network
-			nextIP := make(net.IP, len(ip))
 			copy(nextIP, ip)
 			incIP(nextIP)
 			if !ipnet.Contains(nextIP) {
@@ -762,13 +766,17 @@ func ipsFromCIDR(cidr string) []string {
 		incIP(ip)
 	}
 
+	var nextIP net.IP
+	if skipNetworkAndBroadcast {
+		nextIP = make(net.IP, len(ip))
+	}
+
 	// Iterate through usable host IPs in the subnet
 	count := 0
 	for ipnet.Contains(ip) {
 		// For networks with network/broadcast addresses, stop before broadcast address
 		if skipNetworkAndBroadcast {
 			// Calculate broadcast address by checking if next IP would be outside network
-			nextIP := make(net.IP, len(ip))
 			copy(nextIP, ip)
 			incIP(nextIP)
 			if !ipnet.Contains(nextIP) {
